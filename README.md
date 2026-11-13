@@ -41,12 +41,17 @@ Open your browser and navigate to:
 
 ## 🔑 Default Accounts (Pre-configured)
 
-| Role | Username | Password | Notes |
-| :--- | :--- | :--- | :--- |
-| **Gym Owner** | `owner_admin` | `flexflowOwnerSecure10` | Full administrative control, all activity, encrypted backups |
-| **Head Coach (Staff)** | `priya_coach` | `trainerPassphrase2026` | Member roster, payment entry, attendance check-in |
+| Role | Full Name | Username | Password | Recovery Email | Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Super Admin** | Vikram Joshi (Super Admin) | `superadmin` | `superAdminSecure2026` | `superadmin@flexflowgym.in` | Unrestricted root access (`16/16`), top bar, role assignment, 16 permission gates, upgrade modules |
+| **Operations Admin** | Anjali Deshmukh | `gym_admin` | `adminSecure2026` | `anjali.admin@flexflowgym.in` | Operations & ledger (`9/16` active by default; additional features gated by Super Admin) |
+| **Gym Owner** | Vikram Joshi (Gym Owner) | `owner_admin` | `flexflowOwnerSecure10` | `vikram.joshi.gym@gmail.com` | Operations, voiding, analytics & audit view (`10/16` default; backups/export/undo gated by Super Admin) |
+| **Branch Manager** | Arjun Nair | `branch_mgr` | `managerSecure2026` | `arjun.manager@flexflowgym.in` | Floor operations, plans, billing & analytics (`8/16` default; configurable by Super Admin) |
+| **Finance Manager** | Meera Kulkarni | `finance_mgr` | `financeSecure2026` | `meera.finance@flexflowgym.in` | Billing, receipts, reminders, analytics & audit log (`5/16` default; configurable by Super Admin) |
+| **Head Trainer (Staff)** | Priya Sharma | `priya_coach` | `trainerPassphrase2026` | `priya.sharma@gmail.com` | Basic member & payment entry (`3/16` default; PII/receipts/undo gated by Super Admin) |
+| **Front Desk** | Maya Kapoor | `frontdesk_maya` | `frontdeskPass2026` | `maya.desk@flexflowgym.in` | Member intake, contact PII, payments & receipts (`4/16` default; configurable by Super Admin) |
 
-> *Tip: You can change passwords, add new staff or owner accounts, or test local desktop recovery under **Account & Security**.*
+> *Recovery Testing:* One-time email verification test codes are `492817` and `123456`. You can also change passwords, create new accounts, or invoke local desktop recovery under **Account & Security** or on the Sign-In screen.
 
 ---
 
@@ -96,3 +101,26 @@ npm run preview
 ```
 
 The output will be generated in `dist/`.
+
+Global Navigation & App Controls
+1 – 9 & 0: Switch between permitted sections (Dashboard, Members, Memberships & Plans, Payments Ledger, Analytics, Activity & Undo Log, Backups, Tailscale & Mobile Hub, Account & Security, and Super Admin Permissions)
+Ctrl / Cmd + K or /: Focus Global Search (Members & Receipts)
+X: Toggle Android Expo Mobile Preview (when permitted)
+Shift + L: Sign out of current session
+?: Open/close the Keyboard Shortcuts cheat-sheet modal (also accessible via the sidebar footer button)
+Esc: Close the active modal, confirmation dialog, or detail drawer
+Quick Actions (Permission-Gated)
+N: Enroll New Gym Member
+P: Record External Payment (pre-selects the currently viewed member and auto-fills outstanding dues when applicable)
+A: Assign / Renew Membership Plan (pre-selects the currently viewed member)
+Members Directory
+F: Focus Member Search input
+↑ / ↓: Cycle through filtered members
+E: Edit selected member profile
+R: Open WhatsApp / SMS Payment Reminder (when the member has an outstanding balance)
+Del / Backspace: Open Delete Member confirmation dialog
+Memberships, Payments & Super Admin Governance
+C: Create New Membership Plan (on Memberships view) or toggle the Provision Role Account form (on Super Admin Permissions)
+T: Toggle between Plan Catalog and Active Enrollments tabs (on Memberships view)
+F: Focus Receipt Search (on Payments view)
+↑ / ↓ & Del / Backspace: Navigate and trigger deletion for governed accounts (on Super Admin Permissions

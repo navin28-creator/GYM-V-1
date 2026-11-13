@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { GymDatabase, TailscaleState, User } from '../types/gym';
-import { dbService } from '../services/db';
+import { dbService, hasPermission } from '../services/db';
 import { formatKolkataDateTime } from '../services/crypto';
+import { AnimatedCard, AnimatedSectionPanel } from './MotionPrimitives';
 import {
   Radio,
   Smartphone,
@@ -15,6 +16,7 @@ import {
   Copy,
   Check,
   RotateCcw,
+  Trash2,
 } from 'lucide-react';
 
 interface TailscaleHubViewProps {
@@ -45,6 +47,22 @@ export const TailscaleHubView: React.FC<TailscaleHubViewProps> = ({
     setTimeout(() => setCopiedUrl(false), 2000);
   };
 
+  const canAccessExpoMobile = hasPermission(currentUser, 'canAccessExpoMobile');
+
+  if (!hasPermission(currentUser, 'canManageTailscale')) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <AnimatedSectionPanel className="bg-neutral-900 border border-neutral-800 rounded-xl p-8 text-center space-y-3">
+          <Lock className="w-8 h-8 text-amber-400 mx-auto" />
+          <h3 className="text-base font-bold text-white">Tailscale Hub Access Restricted</h3>
+          <p className="text-xs text-neutral-400 max-w-md mx-auto">
+            Your account does not currently have the <strong>Tailscale Hub & Session Revocation</strong> permission. A Super Admin can grant this access in Admin Permissions.
+          </p>
+        </AnimatedSectionPanel>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -70,18 +88,25 @@ export const TailscaleHubView: React.FC<TailscaleHubViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={onLaunchMobileSimulator}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-xs"
-          >
-            <Smartphone className="w-4 h-4" />
-            <span>Open Android Expo App</span>
-          </button>
+          {canAccessExpoMobile ? (
+            <button
+              onClick={onLaunchMobileSimulator}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-xs"
+            >
+              <Smartphone className="w-4 h-4" />
+              <span>Open Android Expo App</span>
+            </button>
+          ) : (
+            <span className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono text-neutral-400 bg-neutral-900 border border-neutral-800 rounded-lg">
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+              <span>Expo Mobile Restricted by Super Admin</span>
+            </span>
+          )}
         </div>
       </div>
 
       {/* Security Architecture Notice */}
-      <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-2 text-xs text-neutral-300 leading-relaxed">
+      <AnimatedSectionPanel className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-2 text-xs text-neutral-300 leading-relaxed">
         <div className="flex items-center gap-2 text-emerald-400 font-semibold">
           <ShieldCheck className="w-4 h-4" />
           <span>Tailscale Serve vs Tailscale Funnel</span>
@@ -89,12 +114,12 @@ export const TailscaleHubView: React.FC<TailscaleHubViewProps> = ({
         <p>
           Flex & Flow binds exclusively to <code className="text-amber-300 font-mono">127.0.0.1:3000</code>. We use <strong>Tailscale Serve</strong>, never Tailscale Funnel. Funnel would expose your gym's records to the open internet. Tailscale Serve restricts traffic strictly to authenticated devices signed into your gym's private tailnet.
         </p>
-      </div>
+      </AnimatedSectionPanel>
 
       {/* 2-Column: Live Serve Status (Left) + Step-by-Step Expo Android Setup (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column: Live Terminal & Serve Status */}
-        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
+        <AnimatedSectionPanel className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
             <div className="flex items-center gap-2">
               <Terminal className="w-4 h-4 text-emerald-400" />
@@ -152,36 +177,52 @@ export const TailscaleHubView: React.FC<TailscaleHubViewProps> = ({
             </div>
           </div>
 
-          {/* Connected Sessions */}
+            {/* Connected Sessions */}
           <div className="pt-2 border-t border-neutral-800 space-y-2">
             <span className="text-xs font-semibold text-neutral-300 block">
-              Active Authorized Mobile Sessions ({tailscaleState.activeSessions.length})
+              Active Authorized Mobile Sessions ({db.tailscale.activeSessions.length})
             </span>
-            {tailscaleState.activeSessions.map((session) => (
-              <div
-                key={session.deviceId}
-                className="p-3 bg-neutral-950/50 border border-neutral-800 rounded-lg flex items-center justify-between text-xs"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Smartphone className="w-4 h-4 text-sky-400 shrink-0" />
-                  <div>
-                    <span className="font-semibold text-neutral-200">{session.deviceName}</span>
-                    <span className="text-[11px] text-neutral-500 font-mono block">
-                      Staff: {session.username} · IP: {session.ip}
-                    </span>
-                  </div>
-                </div>
-                <div className="text-right text-[11px] font-mono text-emerald-400">
-                  <span className="block">Connected</span>
-                  <span className="text-neutral-500">SecureStore Token</span>
-                </div>
+            {db.tailscale.activeSessions.length === 0 ? (
+              <div className="p-3 bg-neutral-950/50 border border-neutral-800 rounded-lg text-xs text-neutral-500">
+                No active mobile sessions connected.
               </div>
-            ))}
+            ) : (
+              db.tailscale.activeSessions.map((session, idx) => (
+                <AnimatedCard
+                  key={session.deviceId}
+                  index={idx}
+                  className="p-3 bg-neutral-950/50 border border-neutral-800 rounded-lg flex items-center justify-between text-xs gap-2"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Smartphone className="w-4 h-4 text-sky-400 shrink-0" />
+                    <div className="min-w-0">
+                      <span className="font-semibold text-neutral-200 block truncate">{session.deviceName}</span>
+                      <span className="text-[11px] text-neutral-500 font-mono block">
+                        Staff: {session.username} · IP: {session.ip}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-right text-[11px] font-mono text-emerald-400">
+                      <span className="block">Connected</span>
+                      <span className="text-neutral-500">SecureStore Token</span>
+                    </div>
+                    <button
+                      onClick={() => dbService.revokeTailscaleSession(session.deviceId)}
+                      className="p-1.5 text-neutral-400 hover:text-rose-400 rounded hover:bg-rose-950/40 transition-colors"
+                      title="Revoke & Delete Mobile Session"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </AnimatedCard>
+              ))
+            )}
           </div>
-        </div>
+        </AnimatedSectionPanel>
 
         {/* Right Column: Steps to Setup & Run Expo Client */}
-        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
+        <AnimatedSectionPanel delay={0.05} className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
             <div className="flex items-center gap-2">
               <Smartphone className="w-4 h-4 text-amber-400" />
@@ -246,16 +287,23 @@ export const TailscaleHubView: React.FC<TailscaleHubViewProps> = ({
             </div>
 
             <div className="pt-3 border-t border-neutral-800">
-              <button
-                onClick={onLaunchMobileSimulator}
-                className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 text-amber-300 hover:text-amber-200 font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors border border-neutral-700"
-              >
-                <Smartphone className="w-4 h-4" />
-                <span>Simulate Expo Android App in Split / Preview View</span>
-              </button>
+              {canAccessExpoMobile ? (
+                <button
+                  onClick={onLaunchMobileSimulator}
+                  className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 text-amber-300 hover:text-amber-200 font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors border border-neutral-700"
+                >
+                  <Smartphone className="w-4 h-4" />
+                  <span>Simulate Expo Android App in Split / Preview View</span>
+                </button>
+              ) : (
+                <div className="w-full py-2.5 px-3 bg-neutral-950 text-neutral-400 font-mono text-xs rounded-lg flex items-center justify-center gap-2 border border-neutral-800">
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Enable "Access Android Expo Mobile Client" in Super Admin Permissions</span>
+                </div>
+              )}
             </div>
           </div>
-        </div>
+        </AnimatedSectionPanel>
       </div>
     </div>
   );

@@ -1,18 +1,13 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { GymDatabase, Member, MemberStatus, User } from '../types/gym';
-import { dbService } from '../services/db';
+import { dbService, hasPermission } from '../services/db';
 import { formatINR, formatKolkataDate, formatKolkataDateTime } from '../services/crypto';
+import { AnimatedSectionPanel } from './MotionPrimitives';
 import {
   Search,
   Plus,
-  Filter,
-  User as UserIcon,
-  Phone,
-  Mail,
-  Calendar,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
+  AlertTriangle,
   ChevronRight,
   CreditCard,
   Layers,
@@ -50,7 +45,17 @@ export const MembersView: React.FC<MembersViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | MemberStatus>('all');
   const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [confirmDeleteMember, setConfirmDeleteMember] = useState<Member | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const canManageMembers = hasPermission(currentUser, 'canManageMembers');
+  const canDeleteMembers = hasPermission(currentUser, 'canDeleteMembers');
+  const canViewMemberContactDetails = hasPermission(currentUser, 'canViewMemberContactDetails');
+  const canManagePlans = hasPermission(currentUser, 'canManagePlans');
+  const canRecordPayments = hasPermission(currentUser, 'canRecordPayments');
+  const canVoidAndDeletePayments = hasPermission(currentUser, 'canVoidAndDeletePayments');
+  const canPrintReceipts = hasPermission(currentUser, 'canPrintReceipts');
+  const canSendPaymentReminders = hasPermission(currentUser, 'canSendPaymentReminders');
 
   // Filtered members list
   const filteredMembers = db.members.filter((member) => {
@@ -69,8 +74,30 @@ export const MembersView: React.FC<MembersViewProps> = ({
     const result = dbService.deleteMember(memberId);
     if (!result.success) {
       setDeleteError(result.error || 'Failed to delete member.');
+      setConfirmDeleteMember(null);
     } else {
-      setSelectedMember(null);
+      if (selectedMember?.id === memberId) {
+        setSelectedMember(null);
+      }
+      setConfirmDeleteMember(null);
+      setDeleteError(null);
+    }
+  };
+
+  const handleDeleteMembershipFromDrawer = (membershipId: string) => {
+    const result = dbService.deleteMembership(membershipId);
+    if (!result.success) {
+      setDeleteError(result.error || 'Failed to delete enrollment.');
+    } else {
+      setDeleteError(null);
+    }
+  };
+
+  const handleDeleteVoidedPaymentFromDrawer = (paymentId: string) => {
+    const result = dbService.deletePayment(paymentId);
+    if (!result.success) {
+      setDeleteError(result.error || 'Failed to delete payment.');
+    } else {
       setDeleteError(null);
     }
   };
@@ -111,15 +138,17 @@ export const MembersView: React.FC<MembersViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onOpenAddMember}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Member</span>
-          </button>
-        </div>
+        {canManageMembers && (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onOpenAddMember}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-all hover:-translate-y-0.5 shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Member</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Filter and Search Bar */}
@@ -177,7 +206,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Members Table (Left 7 or 12 cols) */}
         <div className={`${selectedMember ? 'lg:col-span-7' : 'lg:col-span-12'} space-y-4`}>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
+          <AnimatedSectionPanel className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-neutral-950/80 text-neutral-400 uppercase font-mono text-[11px] border-b border-neutral-800">
@@ -220,10 +249,18 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
                           {/* Contact */}
                           <td className="py-3 px-3">
-                            <div className="font-mono text-neutral-300">{member.phone}</div>
-                            <div className="text-[11px] text-neutral-400 truncate max-w-[150px]">
-                              {member.email}
-                            </div>
+                            {canViewMemberContactDetails ? (
+                              <>
+                                <div className="font-mono text-neutral-300">{member.phone}</div>
+                                <div className="text-[11px] text-neutral-400 truncate max-w-[150px]">
+                                  {member.email}
+                                </div>
+                              </>
+                            ) : (
+                              <span className="text-[10px] font-mono text-neutral-500 bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800">
+                                Contact Restricted
+                              </span>
+                            )}
                           </td>
 
                           {/* Plan Status */}
@@ -262,17 +299,34 @@ export const MembersView: React.FC<MembersViewProps> = ({
                           </td>
 
                           {/* Actions */}
-                          <td className="py-3 px-3 text-right">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedMember(member);
-                              }}
-                              className="p-1.5 text-neutral-400 hover:text-white rounded hover:bg-neutral-800"
-                              title="View Details"
-                            >
-                              <ChevronRight className="w-4 h-4" />
-                            </button>
+                          <td className="py-3 px-3 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center justify-end gap-1.5">
+                              {canDeleteMembers && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmDeleteMember(member);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-rose-950/70 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-700/70 hover:border-rose-500 transition-all shadow-xs"
+                                  title={`Delete ${member.fullName}`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Delete</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedMember(member);
+                                }}
+                                className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-neutral-800 transition-colors"
+                                title="View Details"
+                              >
+                                <ChevronRight className="w-4 h-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -281,12 +335,12 @@ export const MembersView: React.FC<MembersViewProps> = ({
                 </tbody>
               </table>
             </div>
-          </div>
+          </AnimatedSectionPanel>
         </div>
 
         {/* Selected Member Details Drawer (Right 5 cols) */}
         {selectedMember && memberSummary && (
-          <div className="lg:col-span-5 bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-5 animate-in fade-in duration-150">
+          <AnimatedSectionPanel className="lg:col-span-5 bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-5">
             {/* Header */}
             <div className="flex items-start justify-between border-b border-neutral-800 pb-4">
               <div>
@@ -299,17 +353,33 @@ export const MembersView: React.FC<MembersViewProps> = ({
                 <p className="text-xs text-neutral-400 mt-0.5">{selectedMember.fitnessGoal}</p>
               </div>
 
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
+                {canManageMembers && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingMember(selectedMember)}
+                    className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-neutral-800 transition-colors"
+                    title="Edit Member Profile"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                )}
+                {canDeleteMembers && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteMember(selectedMember)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-950/70 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-700/70 hover:border-rose-500 transition-all"
+                    title="Delete Member Record"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </button>
+                )}
                 <button
-                  onClick={() => setEditingMember(selectedMember)}
-                  className="p-1.5 text-neutral-400 hover:text-white rounded hover:bg-neutral-800"
-                  title="Edit Member Profile"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button
+                  type="button"
                   onClick={() => setSelectedMember(null)}
-                  className="p-1.5 text-neutral-400 hover:text-white rounded hover:bg-neutral-800"
+                  className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-neutral-800 transition-colors"
+                  title="Close Member Details"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -318,23 +388,27 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
             {/* Quick Action Buttons for Member */}
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                onClick={() => onOpenRecordPayment(selectedMember.id)}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg transition-colors font-medium"
-              >
-                <CreditCard className="w-4 h-4 text-sky-400" />
-                <span>Record Payment</span>
-              </button>
+              {canRecordPayments && (
+                <button
+                  onClick={() => onOpenRecordPayment(selectedMember.id)}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg transition-colors font-medium"
+                >
+                  <CreditCard className="w-4 h-4 text-sky-400" />
+                  <span>Record Payment</span>
+                </button>
+              )}
 
-              <button
-                onClick={() => onOpenAssignMembership(selectedMember.id)}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg transition-colors font-medium"
-              >
-                <Layers className="w-4 h-4 text-amber-400" />
-                <span>Renew / Plan</span>
-              </button>
+              {canManageMembers && (
+                <button
+                  onClick={() => onOpenAssignMembership(selectedMember.id)}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg transition-colors font-medium"
+                >
+                  <Layers className="w-4 h-4 text-amber-400" />
+                  <span>Renew / Plan</span>
+                </button>
+              )}
 
-              {memberSummary.outstandingBalanceInr > 0 && (
+              {canSendPaymentReminders && memberSummary.outstandingBalanceInr > 0 && (
                 <button
                   onClick={() =>
                     onOpenReminderModal(
@@ -382,27 +456,69 @@ export const MembersView: React.FC<MembersViewProps> = ({
               <span className="text-[11px] font-mono uppercase text-neutral-500 block">
                 Contact & Emergency
               </span>
-              <div className="bg-neutral-950/40 p-3 rounded-lg border border-neutral-800/80 space-y-1.5 text-neutral-300">
-                <div className="flex justify-between">
-                  <span className="text-neutral-500">Phone</span>
-                  <span className="font-mono">{selectedMember.phone}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-neutral-500">Email</span>
-                  <span className="truncate max-w-[200px]">{selectedMember.email}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-neutral-500">Emergency Contact</span>
-                  <span>{selectedMember.emergencyContactName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-neutral-500">Emergency Phone</span>
-                  <span className="font-mono">{selectedMember.emergencyContactPhone}</span>
-                </div>
-                {selectedMember.healthNotes && (
-                  <div className="pt-1 border-t border-neutral-800 text-amber-300/90 text-[11px]">
-                    <strong>Health Declaration:</strong> {selectedMember.healthNotes}
+              {canViewMemberContactDetails ? (
+                <div className="bg-neutral-950/40 p-3 rounded-lg border border-neutral-800/80 space-y-1.5 text-neutral-300">
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">Phone</span>
+                    <span className="font-mono">{selectedMember.phone}</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">Email</span>
+                    <span className="truncate max-w-[200px]">{selectedMember.email}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">Emergency Contact</span>
+                    <span>{selectedMember.emergencyContactName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">Emergency Phone</span>
+                    <span className="font-mono">{selectedMember.emergencyContactPhone}</span>
+                  </div>
+                  {selectedMember.healthNotes && (
+                    <div className="pt-1 border-t border-neutral-800 text-amber-300/90 text-[11px]">
+                      <strong>Health Declaration:</strong> {selectedMember.healthNotes}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-neutral-950/40 p-3 rounded-lg border border-neutral-800/80 text-[11px] text-neutral-400">
+                  Contact PII and health declarations are restricted. Ask a Super Admin to enable{' '}
+                  <span className="text-amber-300 font-medium">View Member Contact &amp; Health PII</span>.
+                </div>
+              )}
+            </div>
+
+            {/* Enrollments / Memberships for this Member */}
+            <div className="space-y-2 text-xs">
+              <span className="text-[11px] font-mono uppercase text-neutral-500 block">
+                Enrolled Plans ({memberMemberships.length})
+              </span>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {memberMemberships.length === 0 ? (
+                  <div className="text-neutral-500 text-[11px] p-2">No plan enrollments yet.</div>
+                ) : (
+                  memberMemberships.map((mship) => (
+                    <div
+                      key={mship.id}
+                      className="p-2 bg-neutral-950/50 border border-neutral-800 rounded flex items-center justify-between text-xs"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-medium text-neutral-200 truncate">{mship.planName}</div>
+                        <span className="text-[10px] text-neutral-500 font-mono">
+                          {formatKolkataDate(mship.startDate)} → {formatKolkataDate(mship.endDate)} · {formatINR(mship.totalPriceInr)}
+                        </span>
+                      </div>
+                      {canManagePlans && (
+                        <button
+                          onClick={() => handleDeleteMembershipFromDrawer(mship.id)}
+                          className="p-1 text-neutral-400 hover:text-rose-400 rounded hover:bg-rose-950/40 shrink-0"
+                          title="Delete Enrollment"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))
                 )}
               </div>
             </div>
@@ -443,13 +559,26 @@ export const MembersView: React.FC<MembersViewProps> = ({
                         </span>
                       </div>
 
-                      <button
-                        onClick={() => onOpenReceiptModal(p.id)}
-                        className="p-1 text-neutral-400 hover:text-white rounded hover:bg-neutral-800"
-                        title="Print / View Receipt"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        {canVoidAndDeletePayments && p.isVoided && (
+                          <button
+                            onClick={() => handleDeleteVoidedPaymentFromDrawer(p.id)}
+                            className="p-1 text-neutral-400 hover:text-rose-400 rounded hover:bg-rose-950/40"
+                            title="Delete Voided Payment"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {canPrintReceipts && (
+                          <button
+                            onClick={() => onOpenReceiptModal(p.id)}
+                            className="p-1 text-neutral-400 hover:text-white rounded hover:bg-neutral-800"
+                            title="Print / View Receipt"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))
                 )}
@@ -457,20 +586,28 @@ export const MembersView: React.FC<MembersViewProps> = ({
             </div>
 
             {/* Delete Member with Safety Notice */}
-            <div className="pt-3 border-t border-neutral-800 flex justify-between items-center text-xs">
-              <span className="text-neutral-500 text-[11px]">
-                Safe deletion enforces zero historical records
-              </span>
-              <button
-                onClick={() => handleDeleteMember(selectedMember.id)}
-                className="flex items-center gap-1 text-rose-400 hover:text-rose-300 text-xs px-2 py-1 rounded hover:bg-rose-950/30 transition-colors"
-                title="Only allowed if no financial or attendance records exist"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete</span>
-              </button>
+            <div className="pt-4 border-t border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="space-y-0.5">
+                <span className="font-semibold text-neutral-300 block">Member Removal</span>
+                <span className="text-neutral-500 text-[11px] block">
+                  {canDeleteMembers
+                    ? 'Safe deletion requires zero membership or payment history.'
+                    : 'Member deletion restricted by Super Admin.'}
+                </span>
+              </div>
+              {canDeleteMembers && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteMember(selectedMember)}
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white shadow-sm shadow-rose-950/50 transition-all shrink-0"
+                  title="Delete member (only allowed if no financial or membership records exist)"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete Member</span>
+                </button>
+              )}
             </div>
-          </div>
+          </AnimatedSectionPanel>
         )}
       </div>
 
@@ -591,6 +728,89 @@ export const MembersView: React.FC<MembersViewProps> = ({
           </div>
         </div>
       )}
+      {/* Delete Member Confirmation Modal */}
+      <AnimatePresence>
+        {confirmDeleteMember && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setConfirmDeleteMember(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 overflow-y-auto"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.18 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-neutral-900 border border-rose-500/30 rounded-xl p-6 space-y-4 shadow-2xl"
+            >
+              <div className="flex justify-between items-center border-b border-neutral-800 pb-3">
+                <div className="flex items-center gap-2.5 text-rose-400">
+                  <div className="w-8 h-8 rounded-lg bg-rose-500/15 border border-rose-500/30 flex items-center justify-center">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Confirm Member Deletion</h3>
+                    <span className="text-[11px] font-mono text-rose-300/80">
+                      Permanent SQLite Record Removal
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteMember(null)}
+                  className="text-neutral-400 hover:text-white p-1 rounded hover:bg-neutral-800"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-3 bg-neutral-950/70 border border-neutral-800 rounded-lg space-y-1.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-white">{confirmDeleteMember.fullName}</span>
+                  <span className="font-mono text-amber-300 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-800/40">
+                    {confirmDeleteMember.memberNumber}
+                  </span>
+                </div>
+                <div className="text-[11px] text-neutral-400 flex items-center justify-between">
+                  <span>Status: {confirmDeleteMember.status.replace('_', ' ')}</span>
+                  <span>
+                    {db.memberships.filter((m) => m.memberId === confirmDeleteMember.id).length} plan(s) ·{' '}
+                    {db.payments.filter((p) => p.memberId === confirmDeleteMember.id).length} payment(s)
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-xs text-neutral-300 leading-relaxed">
+                Are you sure you want to permanently delete{' '}
+                <strong className="text-white">{confirmDeleteMember.fullName}</strong>? This action
+                removes their profile from the local database. Members with existing membership or
+                financial payment history are automatically protected from deletion.
+              </p>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-neutral-800 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteMember(null)}
+                  className="px-4 py-2 bg-neutral-800 text-neutral-200 hover:text-white hover:bg-neutral-700 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteMember(confirmDeleteMember.id)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-lg transition-colors shadow-sm"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Permanently</span>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

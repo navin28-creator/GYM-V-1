@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GymDatabase, PaymentMethod, PaymentRecord, User } from '../types/gym';
-import { dbService } from '../services/db';
+import { dbService, hasPermission } from '../services/db';
 import { formatINR, formatKolkataDateTime } from '../services/crypto';
+import { AnimatedCard, AnimatedSectionPanel } from './MotionPrimitives';
 import {
   CreditCard,
   Plus,
@@ -13,6 +14,7 @@ import {
   AlertTriangle,
   IndianRupee,
   ShieldAlert,
+  Trash2,
   X,
 } from 'lucide-react';
 
@@ -22,6 +24,8 @@ interface PaymentsViewProps {
   onOpenRecordPayment: () => void;
   onOpenReceiptModal: (paymentId: string) => void;
   onSelectMemberById: (memberId: string) => void;
+  focusedPaymentId?: string | null;
+  onClearFocusedPayment?: () => void;
 }
 
 export const PaymentsView: React.FC<PaymentsViewProps> = ({
@@ -30,13 +34,32 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
   onOpenRecordPayment,
   onOpenReceiptModal,
   onSelectMemberById,
+  focusedPaymentId,
+  onClearFocusedPayment,
 }) => {
   const [methodFilter, setMethodFilter] = useState<'all' | PaymentMethod>('all');
   const [showVoidedOnly, setShowVoidedOnly] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [voidModalPayment, setVoidModalPayment] = useState<PaymentRecord | null>(null);
+  const [deleteModalPayment, setDeleteModalPayment] = useState<PaymentRecord | null>(null);
   const [voidReason, setVoidReason] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const canRecordPayments = hasPermission(currentUser, 'canRecordPayments');
+  const canVoidAndDeletePayments = hasPermission(currentUser, 'canVoidAndDeletePayments');
+  const canPrintReceipts = hasPermission(currentUser, 'canPrintReceipts');
+
+  useEffect(() => {
+    if (!focusedPaymentId) return;
+    const target = db.payments.find((p) => p.id === focusedPaymentId);
+    if (target) {
+      setSearchTerm(target.paymentNumber);
+      setMethodFilter('all');
+      if (target.isVoided) {
+        setShowVoidedOnly(false);
+      }
+    }
+  }, [focusedPaymentId, db.payments]);
 
   // Filter payments
   const filteredPayments = db.payments.filter((payment) => {
@@ -90,6 +113,17 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
     }
   };
 
+  const handleConfirmDeletePayment = () => {
+    if (!deleteModalPayment) return;
+    const res = dbService.deletePayment(deleteModalPayment.id);
+    if (!res.success) {
+      setErrorMsg(res.error || 'Failed to delete payment.');
+    } else {
+      setDeleteModalPayment(null);
+      setErrorMsg(null);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -101,18 +135,20 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={onOpenRecordPayment}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Record External Payment</span>
-        </button>
+        {canRecordPayments && (
+          <button
+            onClick={onOpenRecordPayment}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-all hover:-translate-y-0.5 shadow-xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Record External Payment</span>
+          </button>
+        )}
       </div>
 
       {/* Breakdown KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl">
+        <AnimatedCard index={0} className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl">
           <div className="flex items-center justify-between text-neutral-400 text-xs">
             <span>Net Collections</span>
             <IndianRupee className="w-4 h-4 text-amber-400" />
@@ -123,9 +159,9 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
           <div className="mt-1 text-[11px] text-neutral-500 font-mono">
             {validPayments.length} valid external receipts
           </div>
-        </div>
+        </AnimatedCard>
 
-        <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl">
+        <AnimatedCard index={1} className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl">
           <div className="flex items-center justify-between text-neutral-400 text-xs">
             <span>UPI Receipts (GPay/PhonePe)</span>
             <CreditCard className="w-4 h-4 text-emerald-400" />
@@ -136,9 +172,9 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
           <div className="mt-1 text-[11px] text-neutral-500 font-mono">
             Direct QR & VPA settlements
           </div>
-        </div>
+        </AnimatedCard>
 
-        <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl">
+        <AnimatedCard index={2} className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl">
           <div className="flex items-center justify-between text-neutral-400 text-xs">
             <span>Cash at Counter</span>
             <CreditCard className="w-4 h-4 text-sky-400" />
@@ -149,9 +185,9 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
           <div className="mt-1 text-[11px] text-neutral-500 font-mono">
             Front desk cash drawer
           </div>
-        </div>
+        </AnimatedCard>
 
-        <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl">
+        <AnimatedCard index={3} className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl">
           <div className="flex items-center justify-between text-neutral-400 text-xs">
             <span>Bank & Card Machine</span>
             <CreditCard className="w-4 h-4 text-purple-400" />
@@ -162,7 +198,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
           <div className="mt-1 text-[11px] text-neutral-500 font-mono">
             NEFT / IMPS / EDC Swipes
           </div>
-        </div>
+        </AnimatedCard>
       </div>
 
       {/* Filter and Search Bar */}
@@ -173,10 +209,28 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
           <input
             type="text"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              if (focusedPaymentId && onClearFocusedPayment) {
+                onClearFocusedPayment();
+              }
+            }}
             placeholder="Search by receipt #, ref/UTR, or member name..."
-            className="w-full pl-9 pr-3 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-amber-400"
+            className="w-full pl-9 pr-8 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-amber-400"
           />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('');
+                if (onClearFocusedPayment) onClearFocusedPayment();
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
+              title="Clear search filter"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Method Filter Tabs */}
@@ -198,7 +252,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
       </div>
 
       {/* Payments Table */}
-      <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
+      <AnimatedSectionPanel className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-neutral-950/80 text-neutral-400 uppercase font-mono text-[11px] border-b border-neutral-800">
@@ -222,11 +276,16 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
               ) : (
                 filteredPayments.map((p) => {
                   const member = db.members.find((m) => m.id === p.memberId);
+                  const isFocused = focusedPaymentId === p.id;
                   return (
                     <tr
                       key={p.id}
                       className={`hover:bg-neutral-800/40 transition-colors ${
-                        p.isVoided ? 'opacity-60 bg-rose-950/10' : ''
+                        isFocused
+                          ? 'bg-amber-500/10 ring-1 ring-inset ring-amber-400/50'
+                          : p.isVoided
+                          ? 'opacity-60 bg-rose-950/10'
+                          : ''
                       }`}
                     >
                       {/* Receipt */}
@@ -277,23 +336,34 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
 
                       {/* Actions: View Voucher & Void */}
                       <td className="py-3 px-3 text-right space-x-1">
-                        <button
-                          onClick={() => onOpenReceiptModal(p.id)}
-                          className="p-1.5 text-neutral-400 hover:text-amber-300 rounded hover:bg-neutral-800 transition-colors"
-                          title="Print / View Receipt Voucher"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                        </button>
-
-                        {!p.isVoided && (
+                        {canPrintReceipts && (
                           <button
-                            onClick={() => setVoidModalPayment(p)}
-                            className="p-1.5 text-neutral-400 hover:text-rose-400 rounded hover:bg-neutral-800 transition-colors"
-                            title="Void Payment (Safe Reversal)"
+                            onClick={() => onOpenReceiptModal(p.id)}
+                            className="p-1.5 text-neutral-400 hover:text-amber-300 rounded hover:bg-neutral-800 transition-colors"
+                            title="Print / View Receipt Voucher"
                           >
-                            <Ban className="w-3.5 h-3.5" />
+                            <Printer className="w-3.5 h-3.5" />
                           </button>
                         )}
+
+                        {canVoidAndDeletePayments &&
+                          (!p.isVoided ? (
+                            <button
+                              onClick={() => setVoidModalPayment(p)}
+                              className="p-1.5 text-neutral-400 hover:text-rose-400 rounded hover:bg-neutral-800 transition-colors"
+                              title="Void Payment (Safe Reversal)"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setDeleteModalPayment(p)}
+                              className="p-1.5 text-neutral-400 hover:text-rose-400 rounded hover:bg-rose-950/40 transition-colors"
+                              title="Delete Voided Payment"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          ))}
                       </td>
                     </tr>
                   );
@@ -302,7 +372,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
             </tbody>
           </table>
         </div>
-      </div>
+      </AnimatedSectionPanel>
 
       {/* Void Payment Modal */}
       {voidModalPayment && (
@@ -363,6 +433,49 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Voided Payment Modal */}
+      {deleteModalPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-xl p-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-neutral-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-400">
+                <Trash2 className="w-5 h-5" />
+                <h3 className="text-base font-bold text-white">Delete Voided Payment</h3>
+              </div>
+              <button
+                onClick={() => setDeleteModalPayment(null)}
+                className="text-neutral-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-neutral-300 leading-relaxed">
+              Permanently remove voided voucher{' '}
+              <strong className="font-mono text-amber-300">{deleteModalPayment.paymentNumber}</strong> (
+              <strong className="font-mono text-white">{formatINR(deleteModalPayment.amountInr)}</strong>) from the ledger? This deletion will be recorded in the activity audit log.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-neutral-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setDeleteModalPayment(null)}
+                className="px-4 py-2 bg-neutral-800 text-neutral-300 hover:text-white rounded"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeletePayment}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded"
+              >
+                Confirm Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

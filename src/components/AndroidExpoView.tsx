@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { GymDatabase, Member, PaymentRecord, User, MemberStatus } from '../types/gym';
-import { dbService } from '../services/db';
+import { dbService, hasPermission, isSuperAdminRole } from '../services/db';
 import { formatINR, formatKolkataDate, formatKolkataDateTime } from '../services/crypto';
 import {
   Smartphone,
@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   X,
   ExternalLink,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface AndroidExpoViewProps {
@@ -27,6 +28,7 @@ interface AndroidExpoViewProps {
   currentUser: User | null;
   onOpenReminderModal: (member: Member, balance: number, dueDate?: string) => void;
   onOpenReceiptModal: (paymentId: string) => void;
+  onBackToDesktop?: () => void;
 }
 
 export const AndroidExpoView: React.FC<AndroidExpoViewProps> = ({
@@ -34,11 +36,19 @@ export const AndroidExpoView: React.FC<AndroidExpoViewProps> = ({
   currentUser,
   onOpenReminderModal,
   onOpenReceiptModal,
+  onBackToDesktop,
 }) => {
   const [mobileTab, setMobileTab] = useState<'members' | 'add_member' | 'payment' | 'checkin' | 'activity'>('members');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMobileMember, setSelectedMobileMember] = useState<Member | null>(null);
   const [tailscaleConnected, setTailscaleConnected] = useState(true);
+
+  const canManageMembers = hasPermission(currentUser, 'canManageMembers');
+  const canRecordPayments = hasPermission(currentUser, 'canRecordPayments');
+  const canViewMemberContactDetails = hasPermission(currentUser, 'canViewMemberContactDetails');
+  const canSendPaymentReminders = hasPermission(currentUser, 'canSendPaymentReminders');
+  const canViewAllActivity = hasPermission(currentUser, 'canViewAllActivity');
+  const isSuperAdmin = isSuperAdminRole(currentUser?.role);
 
   // Form states for Mobile actions
   const [newFullName, setNewFullName] = useState('');
@@ -113,21 +123,30 @@ export const AndroidExpoView: React.FC<AndroidExpoViewProps> = ({
     }
   };
 
-  // Staff can review their own activity; owner can review all
-  const myActivityLogs = currentUser?.role === 'owner'
+  // Activity scoped by canViewAllActivity permission
+  const myActivityLogs = canViewAllActivity
     ? db.activityLogs
     : db.activityLogs.filter((l) => l.userId === currentUser?.id);
 
   const filteredMembers = db.members.filter((m) =>
     m.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.phone.includes(searchTerm) ||
+    (canViewMemberContactDetails && m.phone.includes(searchTerm)) ||
     m.memberNumber.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <div className="py-6 px-4 flex flex-col items-center justify-center min-h-[calc(100vh-40px)] bg-neutral-950/80">
       {/* Simulation Controls Top Bar */}
-      <div className="mb-4 flex items-center gap-3 bg-neutral-900 border border-neutral-800 px-4 py-2 rounded-xl text-xs">
+      <div className="mb-4 flex items-center gap-3 flex-wrap justify-center bg-neutral-900 border border-neutral-800 px-4 py-2 rounded-xl text-xs">
+        {!isSuperAdmin && onBackToDesktop && (
+          <button
+            onClick={onBackToDesktop}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-semibold transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
+            <span>Back to Desktop</span>
+          </button>
+        )}
         <span className="text-neutral-400 font-mono">Tailscale Serve Status:</span>
         <button
           onClick={() => setTailscaleConnected(!tailscaleConnected)}
@@ -233,7 +252,8 @@ export const AndroidExpoView: React.FC<AndroidExpoViewProps> = ({
                           <div>
                             <span className="font-semibold text-xs text-white">{member.fullName}</span>
                             <span className="text-[10px] font-mono text-neutral-500 block">
-                              {member.memberNumber} · {member.phone}
+                              {member.memberNumber} ·{' '}
+                              {canViewMemberContactDetails ? member.phone : 'Phone restricted'}
                             </span>
                           </div>
 
@@ -409,7 +429,7 @@ export const AndroidExpoView: React.FC<AndroidExpoViewProps> = ({
             {mobileTab === 'activity' && (
               <div className="space-y-2 text-xs">
                 <span className="text-xs font-bold text-white block">
-                  {currentUser?.role === 'owner' ? 'All Gym Activity' : 'My Recorded Activity'}
+                  {canViewAllActivity ? 'All Gym Activity' : 'My Recorded Activity'}
                 </span>
                 <div className="space-y-1.5">
                   {myActivityLogs.slice(0, 10).map((log) => (
@@ -449,7 +469,12 @@ export const AndroidExpoView: React.FC<AndroidExpoViewProps> = ({
                 </div>
 
                 <div className="space-y-1 text-neutral-300 text-[11px]">
-                  <div>Phone: {selectedMobileMember.phone}</div>
+                  <div>
+                    Phone:{' '}
+                    {canViewMemberContactDetails
+                      ? selectedMobileMember.phone
+                      : 'Restricted by Super Admin'}
+                  </div>
                   <div>Goal: {selectedMobileMember.fitnessGoal}</div>
                   <div>Status: {selectedMobileMember.status}</div>
                 </div>
@@ -465,7 +490,7 @@ export const AndroidExpoView: React.FC<AndroidExpoViewProps> = ({
                         </span>
                       </div>
 
-                      {summary.outstandingBalanceInr > 0 && (
+                      {canSendPaymentReminders && summary.outstandingBalanceInr > 0 && (
                         <button
                           onClick={() => {
                             onOpenReminderModal(
@@ -506,33 +531,28 @@ export const AndroidExpoView: React.FC<AndroidExpoViewProps> = ({
               <Smartphone className="w-4 h-4" />
               <span className="text-[9px]">Members</span>
             </button>
-            <button
-              onClick={() => setMobileTab('add_member')}
-              className={`flex flex-col items-center gap-0.5 ${
-                mobileTab === 'add_member' ? 'text-amber-400' : 'hover:text-neutral-200'
-              }`}
-            >
-              <Plus className="w-4 h-4" />
-              <span className="text-[9px]">Add</span>
-            </button>
-            <button
-              onClick={() => setMobileTab('payment')}
-              className={`flex flex-col items-center gap-0.5 ${
-                mobileTab === 'payment' ? 'text-amber-400' : 'hover:text-neutral-200'
-              }`}
-            >
-              <CreditCard className="w-4 h-4" />
-              <span className="text-[9px]">Pay</span>
-            </button>
-            <button
-              onClick={() => setMobileTab('checkin')}
-              className={`flex flex-col items-center gap-0.5 ${
-                mobileTab === 'checkin' ? 'text-amber-400' : 'hover:text-neutral-200'
-              }`}
-            >
-              <ClipboardCheck className="w-4 h-4" />
-              <span className="text-[9px]">Check In</span>
-            </button>
+            {canManageMembers && (
+              <button
+                onClick={() => setMobileTab('add_member')}
+                className={`flex flex-col items-center gap-0.5 ${
+                  mobileTab === 'add_member' ? 'text-amber-400' : 'hover:text-neutral-200'
+                }`}
+              >
+                <Plus className="w-4 h-4" />
+                <span className="text-[9px]">Add</span>
+              </button>
+            )}
+            {canRecordPayments && (
+              <button
+                onClick={() => setMobileTab('payment')}
+                className={`flex flex-col items-center gap-0.5 ${
+                  mobileTab === 'payment' ? 'text-amber-400' : 'hover:text-neutral-200'
+                }`}
+              >
+                <CreditCard className="w-4 h-4" />
+                <span className="text-[9px]">Pay</span>
+              </button>
+            )}
             <button
               onClick={() => setMobileTab('activity')}
               className={`flex flex-col items-center gap-0.5 ${

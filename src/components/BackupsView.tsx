@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { GymDatabase, BackupConfig, User } from '../types/gym';
-import { dbService } from '../services/db';
+import { dbService, hasPermission } from '../services/db';
+import { AnimatedSectionPanel } from './MotionPrimitives';
 import {
   generateRandomBackupKey,
   isValid32ByteBase64Key,
@@ -174,6 +175,22 @@ export const BackupsView: React.FC<BackupsViewProps> = ({ db, currentUser }) => 
     }
   };
 
+  if (!hasPermission(currentUser, 'canManageBackups')) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <AnimatedSectionPanel className="bg-neutral-900 border border-neutral-800 rounded-xl p-8 text-center space-y-3">
+          <Lock className="w-8 h-8 text-amber-400 mx-auto" />
+          <h3 className="text-base font-bold text-white">Backups & SQLite Restore Restricted</h3>
+          <p className="text-xs text-neutral-400 max-w-md mx-auto">
+            Your account does not currently have the <strong>AES-256 Backups & SQLite Restore</strong> permission. A Super Admin can grant this access in Admin Permissions.
+          </p>
+        </AnimatedSectionPanel>
+      </div>
+    );
+  }
+
+  const canExportData = hasPermission(currentUser, 'canExportData');
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -185,29 +202,38 @@ export const BackupsView: React.FC<BackupsViewProps> = ({ db, currentUser }) => 
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleDownloadUnencryptedSnapshot}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-200 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors"
-          >
-            <Download className="w-4 h-4 text-amber-400" />
-            <span>Download .sqlite (Plain)</span>
-          </button>
-          <button
-            onClick={handleDownloadEncryptedBackup}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-xs"
-          >
-            <Lock className="w-4 h-4" />
-            <span>Create Encrypted Backup Now</span>
-          </button>
-          <a
-            href="/flex-and-flow-app.zip"
-            download="flex-and-flow-app.zip"
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors shadow-xs"
-          >
-            <Download className="w-4 h-4" />
-            <span>Download Code (ZIP)</span>
-          </a>
+        <div className="flex items-center gap-2 flex-wrap">
+          {canExportData ? (
+            <>
+              <button
+                onClick={handleDownloadUnencryptedSnapshot}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-200 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors"
+              >
+                <Download className="w-4 h-4 text-amber-400" />
+                <span>Download .sqlite (Plain)</span>
+              </button>
+              <button
+                onClick={handleDownloadEncryptedBackup}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-xs"
+              >
+                <Lock className="w-4 h-4" />
+                <span>Create Encrypted Backup Now</span>
+              </button>
+              <a
+                href="/flex-and-flow-app.zip"
+                download="flex-and-flow-app.zip"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors shadow-xs"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download Code (ZIP)</span>
+              </a>
+            </>
+          ) : (
+            <span className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono text-neutral-400 bg-neutral-900 border border-neutral-800 rounded-lg">
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+              <span>File Export Restricted by Super Admin</span>
+            </span>
+          )}
         </div>
       </div>
 
@@ -229,7 +255,7 @@ export const BackupsView: React.FC<BackupsViewProps> = ({ db, currentUser }) => 
       )}
 
       {/* Security Warning Notice */}
-      <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-2 text-xs">
+      <AnimatedSectionPanel className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-2 text-xs">
         <div className="flex items-center gap-2 text-amber-400 font-semibold">
           <ShieldAlert className="w-4 h-4" />
           <span>Security & Data Privacy Policy</span>
@@ -237,12 +263,12 @@ export const BackupsView: React.FC<BackupsViewProps> = ({ db, currentUser }) => 
         <p className="text-neutral-300 leading-relaxed">
           The desktop remains the sole source of truth. The unencrypted SQLite snapshot contains complete member records, emergency contacts, and external financial records. Keep it confidential. Automated email snapshots are strictly encrypted with <strong>AES-256-GCM</strong>. Losing the 32-byte encryption key renders encrypted snapshots permanently unrecoverable.
         </p>
-      </div>
+      </AnimatedSectionPanel>
 
       {/* 2-Column Grid: Automated Encrypted Email Backup Configuration (Left) + Decrypt & Restore Tool (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column: Automated Email Backup & AES-256-GCM Settings */}
-        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
+        <AnimatedSectionPanel className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
             <div className="flex items-center gap-2">
               <Mail className="w-4 h-4 text-sky-400" />
@@ -384,10 +410,10 @@ export const BackupsView: React.FC<BackupsViewProps> = ({ db, currentUser }) => 
               </button>
             </div>
           </form>
-        </div>
+        </AnimatedSectionPanel>
 
         {/* Right Column: In-App Decrypt & Restore Tool (CLI node scripts/decrypt-backup.js equivalent) */}
-        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
+        <AnimatedSectionPanel delay={0.05} className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
             <div className="flex items-center gap-2">
               <Unlock className="w-4 h-4 text-emerald-400" />
@@ -477,7 +503,7 @@ export const BackupsView: React.FC<BackupsViewProps> = ({ db, currentUser }) => 
               </div>
             )}
           </div>
-        </div>
+        </AnimatedSectionPanel>
       </div>
     </div>
   );
