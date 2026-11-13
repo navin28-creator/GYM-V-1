@@ -9,12 +9,232 @@ import {
   BackupConfig,
   TailscaleState,
   UserRole,
+  AdminPermissions,
   GymDatabase,
 } from '../types/gym';
 import { generateRandomBackupKey, encryptSqliteBackup, decryptSqliteBackup } from './crypto';
 
 const DB_STORAGE_KEY = 'flex_flow_gym_sqlite_v1';
 const AUTH_SESSION_KEY = 'flex_flow_current_session';
+
+export const FULL_ADMIN_PERMISSIONS: AdminPermissions = {
+  canManageMembers: true,
+  canDeleteMembers: true,
+  canViewMemberContactDetails: true,
+  canManagePlans: true,
+  canRecordPayments: true,
+  canVoidAndDeletePayments: true,
+  canPrintReceipts: true,
+  canSendPaymentReminders: true,
+  canViewAnalytics: true,
+  canExportData: true,
+  canViewAllActivity: true,
+  canUndoActions: true,
+  canManageBackups: true,
+  canManageStaffAccounts: true,
+  canManageTailscale: true,
+  canAccessExpoMobile: true,
+};
+
+export const ZERO_PERMISSIONS: AdminPermissions = {
+  canManageMembers: false,
+  canDeleteMembers: false,
+  canViewMemberContactDetails: false,
+  canManagePlans: false,
+  canRecordPayments: false,
+  canVoidAndDeletePayments: false,
+  canPrintReceipts: false,
+  canSendPaymentReminders: false,
+  canViewAnalytics: false,
+  canExportData: false,
+  canViewAllActivity: false,
+  canUndoActions: false,
+  canManageBackups: false,
+  canManageStaffAccounts: false,
+  canManageTailscale: false,
+  canAccessExpoMobile: false,
+};
+
+export const OWNER_DEFAULT_PERMISSIONS: AdminPermissions = {
+  canManageMembers: true,
+  canDeleteMembers: false,
+  canViewMemberContactDetails: true,
+  canManagePlans: true,
+  canRecordPayments: true,
+  canVoidAndDeletePayments: true,
+  canPrintReceipts: true,
+  canSendPaymentReminders: true,
+  canViewAnalytics: true,
+  canExportData: false,
+  canViewAllActivity: true,
+  canUndoActions: false,
+  canManageBackups: false,
+  canManageStaffAccounts: false,
+  canManageTailscale: false,
+  canAccessExpoMobile: false,
+};
+
+export const OPERATIONS_ADMIN_PERMISSIONS: AdminPermissions = {
+  canManageMembers: true,
+  canDeleteMembers: false,
+  canViewMemberContactDetails: true,
+  canManagePlans: true,
+  canRecordPayments: true,
+  canVoidAndDeletePayments: false,
+  canPrintReceipts: true,
+  canSendPaymentReminders: true,
+  canViewAnalytics: true,
+  canExportData: false,
+  canViewAllActivity: true,
+  canUndoActions: false,
+  canManageBackups: false,
+  canManageStaffAccounts: false,
+  canManageTailscale: false,
+  canAccessExpoMobile: false,
+};
+
+export const MANAGER_DEFAULT_PERMISSIONS: AdminPermissions = {
+  canManageMembers: true,
+  canDeleteMembers: false,
+  canViewMemberContactDetails: true,
+  canManagePlans: true,
+  canRecordPayments: true,
+  canVoidAndDeletePayments: false,
+  canPrintReceipts: true,
+  canSendPaymentReminders: true,
+  canViewAnalytics: true,
+  canExportData: false,
+  canViewAllActivity: false,
+  canUndoActions: false,
+  canManageBackups: false,
+  canManageStaffAccounts: false,
+  canManageTailscale: false,
+  canAccessExpoMobile: false,
+};
+
+export const ACCOUNTANT_DEFAULT_PERMISSIONS: AdminPermissions = {
+  canManageMembers: false,
+  canDeleteMembers: false,
+  canViewMemberContactDetails: false,
+  canManagePlans: false,
+  canRecordPayments: true,
+  canVoidAndDeletePayments: false,
+  canPrintReceipts: true,
+  canSendPaymentReminders: true,
+  canViewAnalytics: true,
+  canExportData: false,
+  canViewAllActivity: true,
+  canUndoActions: false,
+  canManageBackups: false,
+  canManageStaffAccounts: false,
+  canManageTailscale: false,
+  canAccessExpoMobile: false,
+};
+
+export const STAFF_DEFAULT_PERMISSIONS: AdminPermissions = {
+  canManageMembers: true,
+  canDeleteMembers: false,
+  canViewMemberContactDetails: false,
+  canManagePlans: false,
+  canRecordPayments: true,
+  canVoidAndDeletePayments: false,
+  canPrintReceipts: false,
+  canSendPaymentReminders: true,
+  canViewAnalytics: false,
+  canExportData: false,
+  canViewAllActivity: false,
+  canUndoActions: false,
+  canManageBackups: false,
+  canManageStaffAccounts: false,
+  canManageTailscale: false,
+  canAccessExpoMobile: false,
+};
+
+export const RECEPTIONIST_DEFAULT_PERMISSIONS: AdminPermissions = {
+  canManageMembers: true,
+  canDeleteMembers: false,
+  canViewMemberContactDetails: true,
+  canManagePlans: false,
+  canRecordPayments: true,
+  canVoidAndDeletePayments: false,
+  canPrintReceipts: true,
+  canSendPaymentReminders: false,
+  canViewAnalytics: false,
+  canExportData: false,
+  canViewAllActivity: false,
+  canUndoActions: false,
+  canManageBackups: false,
+  canManageStaffAccounts: false,
+  canManageTailscale: false,
+  canAccessExpoMobile: false,
+};
+
+export function getDefaultPermissionsForRole(role?: UserRole | null): AdminPermissions {
+  switch (role) {
+    case 'super_admin':
+      return { ...FULL_ADMIN_PERMISSIONS };
+    case 'owner':
+      return { ...OWNER_DEFAULT_PERMISSIONS };
+    case 'admin':
+      return { ...OPERATIONS_ADMIN_PERMISSIONS };
+    case 'manager':
+      return { ...MANAGER_DEFAULT_PERMISSIONS };
+    case 'accountant':
+      return { ...ACCOUNTANT_DEFAULT_PERMISSIONS };
+    case 'receptionist':
+      return { ...RECEPTIONIST_DEFAULT_PERMISSIONS };
+    case 'staff':
+    default:
+      return { ...STAFF_DEFAULT_PERMISSIONS };
+  }
+}
+
+export function isAdminRole(role?: UserRole | null): boolean {
+  return role === 'super_admin' || role === 'admin' || role === 'owner' || role === 'manager';
+}
+
+export function isSuperAdminRole(role?: UserRole | null): boolean {
+  return role === 'super_admin';
+}
+
+export function getEffectivePermissions(user?: User | null): AdminPermissions {
+  if (!user) return { ...ZERO_PERMISSIONS };
+  if (user.role === 'super_admin') return { ...FULL_ADMIN_PERMISSIONS };
+  const roleDefaults = getDefaultPermissionsForRole(user.role);
+  return {
+    ...roleDefaults,
+    ...(user.permissions || {}),
+  };
+}
+
+export function hasPermission(
+  user: User | null | undefined,
+  perm: keyof AdminPermissions
+): boolean {
+  if (!user) return false;
+  if (user.role === 'super_admin') return true;
+  return Boolean(getEffectivePermissions(user)[perm]);
+}
+
+export function getRoleLabel(role?: UserRole | null): string {
+  switch (role) {
+    case 'super_admin':
+      return 'Super Admin';
+    case 'admin':
+      return 'Operations Admin';
+    case 'owner':
+      return 'Gym Owner';
+    case 'manager':
+      return 'Branch Manager';
+    case 'accountant':
+      return 'Finance Manager';
+    case 'receptionist':
+      return 'Front Desk';
+    case 'staff':
+    default:
+      return 'Head Trainer (Staff)';
+  }
+}
 
 const DEFAULT_PLANS: MembershipPlan[] = [
   {
@@ -455,6 +675,28 @@ function createInitialDatabase(): GymDatabase {
     dbPath: '%APPDATA%\\Flex & Flow\\gym.sqlite',
     users: [
       {
+        id: 'usr-super-1',
+        username: 'superadmin',
+        fullName: 'Vikram Joshi (Super Admin)',
+        role: 'super_admin',
+        passwordHash: 'superAdminSecure2026',
+        recoveryEmail: 'superadmin@flexflowgym.in',
+        emailVerified: true,
+        createdAt: '2025-08-01T07:30:00.000Z',
+        permissions: { ...FULL_ADMIN_PERMISSIONS },
+      },
+      {
+        id: 'usr-admin-1',
+        username: 'gym_admin',
+        fullName: 'Anjali Deshmukh (Operations Admin)',
+        role: 'admin',
+        passwordHash: 'adminSecure2026',
+        recoveryEmail: 'anjali.admin@flexflowgym.in',
+        emailVerified: true,
+        createdAt: '2025-08-01T07:45:00.000Z',
+        permissions: { ...OPERATIONS_ADMIN_PERMISSIONS },
+      },
+      {
         id: 'usr-owner-1',
         username: 'owner_admin',
         fullName: 'Vikram Joshi (Gym Owner)',
@@ -463,6 +705,29 @@ function createInitialDatabase(): GymDatabase {
         recoveryEmail: 'vikram.joshi.gym@gmail.com',
         emailVerified: true,
         createdAt: '2025-08-01T08:00:00.000Z',
+        permissions: { ...OWNER_DEFAULT_PERMISSIONS },
+      },
+      {
+        id: 'usr-manager-1',
+        username: 'branch_mgr',
+        fullName: 'Arjun Nair (Branch Manager)',
+        role: 'manager',
+        passwordHash: 'managerSecure2026',
+        recoveryEmail: 'arjun.manager@flexflowgym.in',
+        emailVerified: true,
+        createdAt: '2025-08-05T09:00:00.000Z',
+        permissions: { ...MANAGER_DEFAULT_PERMISSIONS },
+      },
+      {
+        id: 'usr-accountant-1',
+        username: 'finance_mgr',
+        fullName: 'Meera Kulkarni (Finance Manager)',
+        role: 'accountant',
+        passwordHash: 'financeSecure2026',
+        recoveryEmail: 'meera.finance@flexflowgym.in',
+        emailVerified: true,
+        createdAt: '2025-08-06T09:30:00.000Z',
+        permissions: { ...ACCOUNTANT_DEFAULT_PERMISSIONS },
       },
       {
         id: 'usr-staff-1',
@@ -473,6 +738,18 @@ function createInitialDatabase(): GymDatabase {
         recoveryEmail: 'priya.sharma@gmail.com',
         emailVerified: false,
         createdAt: '2025-08-10T10:00:00.000Z',
+        permissions: { ...STAFF_DEFAULT_PERMISSIONS },
+      },
+      {
+        id: 'usr-reception-1',
+        username: 'frontdesk_maya',
+        fullName: 'Maya Kapoor (Front Desk)',
+        role: 'receptionist',
+        passwordHash: 'frontdeskPass2026',
+        recoveryEmail: 'maya.desk@flexflowgym.in',
+        emailVerified: false,
+        createdAt: '2025-08-12T10:00:00.000Z',
+        permissions: { ...RECEPTIONIST_DEFAULT_PERMISSIONS },
       },
     ],
     plans: DEFAULT_PLANS,
@@ -511,6 +788,12 @@ function createInitialDatabase(): GymDatabase {
         },
       ],
     },
+    upgradeModules: {
+      multiBranchEnabled: false,
+      gstInvoicingEnabled: false,
+      biometricGateEnabled: false,
+      trainerPayrollEnabled: false,
+    },
   };
 }
 
@@ -528,8 +811,53 @@ class DatabaseService {
     try {
       const data = localStorage.getItem(DB_STORAGE_KEY);
       if (data) {
-        const parsed = JSON.parse(data);
+        const parsed: GymDatabase = JSON.parse(data);
         if (parsed && parsed.members && parsed.users) {
+          const defaults = createInitialDatabase();
+          let updated = false;
+          for (const defUser of defaults.users) {
+            if (!parsed.users.some((u) => u.username === defUser.username || u.role === defUser.role)) {
+              parsed.users.push(defUser);
+              updated = true;
+            }
+          }
+          parsed.users = parsed.users.map((u) => {
+            const roleDefaults = getDefaultPermissionsForRole(u.role);
+            const mergedPerms = {
+              ...roleDefaults,
+              ...(u.permissions || {}),
+            };
+            if (!u.permissions || Object.keys(roleDefaults).some((k) => !(k in (u.permissions || {})))) {
+              updated = true;
+              return {
+                ...u,
+                permissions: mergedPerms,
+              };
+            }
+            return u;
+          });
+          const superAdmins = parsed.users.filter((u) => u.role === 'super_admin');
+          if (superAdmins.length > 1) {
+            const primarySuperId =
+              superAdmins.find((u) => u.id === 'usr-super-1')?.id || superAdmins[0].id;
+            parsed.users = parsed.users.map((u) =>
+              u.role === 'super_admin' && u.id !== primarySuperId
+                ? {
+                    ...u,
+                    role: 'admin',
+                    permissions: getDefaultPermissionsForRole('admin'),
+                  }
+                : u
+            );
+            updated = true;
+          }
+          if (!parsed.upgradeModules) {
+            parsed.upgradeModules = defaults.upgradeModules;
+            updated = true;
+          }
+          if (updated) {
+            this.saveToStorage(parsed);
+          }
           return parsed;
         }
       }
@@ -578,10 +906,8 @@ class DatabaseService {
         }
       }
     } catch {}
-    // Default to owner user for first convenience if exists
-    if (this.db.users.length > 0) {
-      this.currentUser = this.db.users[0];
-    }
+    // Require explicit sign-in on Login Page when no active session exists
+    this.currentUser = null;
   }
 
   public getCurrentUser(): User | null {
@@ -681,15 +1007,202 @@ class DatabaseService {
     return { success: true, user: newUser };
   }
 
+  public createUserAccount(params: {
+    username: string;
+    fullName: string;
+    passwordPlain: string;
+    role: UserRole;
+  }): { success: boolean; user?: User; error?: string } {
+    if (params.role === 'super_admin') {
+      return {
+        success: false,
+        error: 'Restricted: Only one Super Admin account is permitted on this system.',
+      };
+    }
+
+    const isBasicStaffRole = params.role === 'staff' || params.role === 'receptionist';
+    if (this.currentUser && this.currentUser.role !== 'super_admin' && !isBasicStaffRole) {
+      return {
+        success: false,
+        error: 'Restricted: Only Super Admin can create privileged Admin, Owner, Manager, or Finance roles.',
+      };
+    }
+
+    const minLen = isBasicStaffRole ? 8 : 10;
+    if (params.passwordPlain.length < minLen) {
+      return {
+        success: false,
+        error: `${getRoleLabel(params.role)} password must be at least ${minLen} characters long.`,
+      };
+    }
+    if (this.db.users.some((u) => u.username.toLowerCase() === params.username.trim().toLowerCase())) {
+      return { success: false, error: 'Username is already taken.' };
+    }
+
+    const newUser: User = {
+      id: `usr-${params.role}-${Date.now()}`,
+      username: params.username.trim(),
+      fullName: params.fullName.trim() || params.username.trim(),
+      role: params.role,
+      passwordHash: params.passwordPlain,
+      emailVerified: false,
+      createdAt: new Date().toISOString(),
+      permissions: getDefaultPermissionsForRole(params.role),
+    };
+
+    this.db.users.push(newUser);
+    this.logActivity({
+      actionType: 'user_created',
+      targetType: 'user',
+      targetId: newUser.id,
+      targetName: newUser.username,
+      description: `${getRoleLabel(params.role)} account "${newUser.username}" created by ${this.currentUser?.username || 'system'}.`,
+      isReversible: false,
+    });
+
+    this.notify();
+    return { success: true, user: newUser };
+  }
+
+  public updateUserRole(
+    userId: string,
+    newRole: UserRole,
+    applyRoleDefaults: boolean = true
+  ): { success: boolean; error?: string } {
+    if (this.currentUser?.role !== 'super_admin') {
+      return {
+        success: false,
+        error: 'Restricted: Only Super Admin accounts can change user roles.',
+      };
+    }
+    if (newRole === 'super_admin') {
+      return {
+        success: false,
+        error: 'Restricted: Only one Super Admin account is permitted on this system.',
+      };
+    }
+    const target = this.db.users.find((u) => u.id === userId);
+    if (!target) {
+      return { success: false, error: 'Target account not found.' };
+    }
+    if (target.id === this.currentUser.id) {
+      return { success: false, error: 'Cannot downgrade your own active Super Admin session.' };
+    }
+    if (target.role === 'super_admin') {
+      const superAdmins = this.db.users.filter((u) => u.role === 'super_admin');
+      if (superAdmins.length <= 1) {
+        return { success: false, error: 'At least one Super Admin must remain.' };
+      }
+    }
+
+    const oldRoleLabel = getRoleLabel(target.role);
+    target.role = newRole;
+    if (applyRoleDefaults) {
+      target.permissions = getDefaultPermissionsForRole(newRole);
+    }
+
+    this.logActivity({
+      actionType: 'update_role',
+      targetType: 'user',
+      targetId: target.id,
+      targetName: target.username,
+      description: `Super Admin changed role for "${target.username}" from ${oldRoleLabel} to ${getRoleLabel(newRole)}.`,
+      isReversible: false,
+    });
+
+    this.notify();
+    return { success: true };
+  }
+
+  public updateUserPermissions(
+    userId: string,
+    permissions: Partial<AdminPermissions>
+  ): { success: boolean; error?: string } {
+    if (this.currentUser?.role !== 'super_admin') {
+      return {
+        success: false,
+        error: 'Restricted: Only Super Admin accounts can modify account permissions.',
+      };
+    }
+
+    const target = this.db.users.find((u) => u.id === userId);
+    if (!target) {
+      return { success: false, error: 'Target account not found.' };
+    }
+    if (target.role === 'super_admin') {
+      return {
+        success: false,
+        error: 'Super Admin accounts inherently hold unrestricted permissions.',
+      };
+    }
+
+    const current = getEffectivePermissions(target);
+    target.permissions = {
+      ...current,
+      ...permissions,
+    };
+
+    const grantedCount = Object.values(target.permissions).filter(Boolean).length;
+    const totalCount = Object.keys(target.permissions).length;
+
+    this.logActivity({
+      actionType: 'update_permissions',
+      targetType: 'user',
+      targetId: target.id,
+      targetName: target.username,
+      description: `Super Admin updated permissions for "${target.username}" (${grantedCount}/${totalCount} permissions active).`,
+      isReversible: false,
+    });
+
+    this.notify();
+    return { success: true };
+  }
+
+  public deleteUserAccount(userId: string): { success: boolean; error?: string } {
+    if (this.currentUser?.id === userId) {
+      return { success: false, error: 'You cannot delete the currently signed-in account.' };
+    }
+    const target = this.db.users.find((u) => u.id === userId);
+    if (!target) {
+      return { success: false, error: 'Account not found.' };
+    }
+    const adminUsers = this.db.users.filter((u) => isAdminRole(u.role));
+    if (isAdminRole(target.role) && adminUsers.length <= 1) {
+      return { success: false, error: 'At least one admin/owner account must remain in the database.' };
+    }
+    if (target.role === 'super_admin') {
+      const superAdmins = this.db.users.filter((u) => u.role === 'super_admin');
+      if (superAdmins.length <= 1) {
+        return { success: false, error: 'Cannot delete the last remaining Super Admin account.' };
+      }
+    }
+
+    this.db.users = this.db.users.filter((u) => u.id !== userId);
+    this.logActivity({
+      actionType: 'delete_user',
+      targetType: 'user',
+      targetId: userId,
+      targetName: target.username,
+      description: `Deleted ${getRoleLabel(target.role)} account "${target.username}".`,
+      isReversible: false,
+    });
+
+    this.notify();
+    return { success: true };
+  }
+
   // Password Recovery Flows
   public performLocalRecovery(newPasswordPlain: string): { success: boolean; error?: string } {
     if (newPasswordPlain.length < 10) {
       return { success: false, error: 'New owner password must be at least 10 characters long.' };
     }
 
-    const owner = this.db.users.find((u) => u.role === 'owner');
+    const owner =
+      this.db.users.find((u) => u.role === 'owner') ||
+      this.db.users.find((u) => u.role === 'super_admin') ||
+      this.db.users.find((u) => u.role === 'admin');
     if (!owner) {
-      return { success: false, error: 'No owner account found to recover.' };
+      return { success: false, error: 'No owner or admin account found to recover.' };
     }
 
     // Replaces owner password, signs out active sessions, preserves gym records
@@ -795,15 +1308,14 @@ class DatabaseService {
   }
 
   public deleteMember(id: string): { success: boolean; error?: string } {
-    // Safety check: a member with later history (payments, memberships) cannot be deleted!
+    // Safety check: a member with later financial or membership history cannot be deleted!
     const hasMemberships = this.db.memberships.some((m) => m.memberId === id);
     const hasPayments = this.db.payments.some((p) => p.memberId === id);
-    const hasCheckins = this.db.checkIns.some((c) => c.memberId === id);
 
-    if (hasMemberships || hasPayments || hasCheckins) {
+    if (hasMemberships || hasPayments) {
       return {
         success: false,
-        error: 'Safety restriction: This member has active financial, membership, or attendance history and cannot be deleted. Consider freezing their account instead.',
+        error: 'Safety restriction: This member has active financial or membership history and cannot be deleted. Consider freezing their account instead.',
       };
     }
 
@@ -811,6 +1323,7 @@ class DatabaseService {
     if (!member) return { success: false, error: 'Member not found.' };
 
     this.db.members = this.db.members.filter((m) => m.id !== id);
+    this.db.checkIns = this.db.checkIns.filter((c) => c.memberId !== id);
 
     this.logActivity({
       actionType: 'delete_member',
@@ -820,6 +1333,83 @@ class DatabaseService {
       description: `Deleted empty member record ${member.fullName} (${member.memberNumber}).`,
       isReversible: true,
       snapshotBefore: member,
+      snapshotAfter: null,
+    });
+
+    this.notify();
+    return { success: true };
+  }
+
+  // Plans CRUD
+  public createPlan(planData: Omit<MembershipPlan, 'id'>): MembershipPlan {
+    const newPlan: MembershipPlan = {
+      ...planData,
+      id: `plan-${Date.now()}`,
+    };
+    this.db.plans.push(newPlan);
+
+    this.logActivity({
+      actionType: 'create_plan',
+      targetType: 'plan',
+      targetId: newPlan.id,
+      targetName: newPlan.name,
+      description: `Created membership plan "${newPlan.name}" (₹${newPlan.priceInr.toLocaleString('en-IN')} / ${newPlan.durationDays} days).`,
+      isReversible: true,
+      snapshotBefore: null,
+      snapshotAfter: newPlan,
+    });
+
+    this.notify();
+    return newPlan;
+  }
+
+  public deletePlan(planId: string): { success: boolean; error?: string } {
+    const plan = this.db.plans.find((p) => p.id === planId);
+    if (!plan) return { success: false, error: 'Membership plan not found.' };
+
+    const hasEnrollments = this.db.memberships.some((m) => m.planId === planId);
+    this.db.plans = this.db.plans.filter((p) => p.id !== planId);
+
+    this.logActivity({
+      actionType: 'delete_plan',
+      targetType: 'plan',
+      targetId: plan.id,
+      targetName: plan.name,
+      description: `Deleted membership plan "${plan.name}" (₹${plan.priceInr.toLocaleString('en-IN')}).`,
+      isReversible: !hasEnrollments,
+      snapshotBefore: plan,
+      snapshotAfter: null,
+    });
+
+    this.notify();
+    return { success: true };
+  }
+
+  public deleteMembership(membershipId: string): { success: boolean; error?: string } {
+    const membership = this.db.memberships.find((m) => m.id === membershipId);
+    if (!membership) return { success: false, error: 'Enrollment record not found.' };
+
+    const hasValidPayment = this.db.payments.some(
+      (p) => p.membershipId === membershipId && !p.isVoided
+    );
+    if (hasValidPayment) {
+      return {
+        success: false,
+        error: 'Safety restriction: A valid payment is linked to this enrollment. Void the payment first before deleting.',
+      };
+    }
+
+    const member = this.db.members.find((m) => m.id === membership.memberId);
+    this.db.memberships = this.db.memberships.filter((m) => m.id !== membershipId);
+
+    this.logActivity({
+      actionType: 'delete_membership',
+      targetType: 'membership',
+      targetId: membership.id,
+      targetName: `${membership.planName} (${member?.fullName || 'Member'})`,
+      description: `Deleted enrollment "${membership.planName}" for ${member?.fullName || 'member'}.`,
+      isReversible: true,
+      snapshotBefore: membership,
       snapshotAfter: null,
     });
 
@@ -945,6 +1535,32 @@ class DatabaseService {
     return { success: true };
   }
 
+  public deletePayment(paymentId: string): { success: boolean; error?: string } {
+    const payment = this.db.payments.find((p) => p.id === paymentId);
+    if (!payment) return { success: false, error: 'Payment record not found.' };
+    if (!payment.isVoided) {
+      return {
+        success: false,
+        error: 'Audit restriction: Void this payment first before deleting it from the ledger.',
+      };
+    }
+
+    const member = this.db.members.find((m) => m.id === payment.memberId);
+    this.db.payments = this.db.payments.filter((p) => p.id !== paymentId);
+
+    this.logActivity({
+      actionType: 'delete_payment',
+      targetType: 'payment',
+      targetId: payment.id,
+      targetName: payment.paymentNumber,
+      description: `Deleted voided payment voucher ${payment.paymentNumber} (₹${payment.amountInr.toLocaleString('en-IN')}) for ${member?.fullName || 'member'}.`,
+      isReversible: false,
+    });
+
+    this.notify();
+    return { success: true };
+  }
+
   // Attendance Check-ins
   public recordCheckIn(memberId: string): { success: boolean; checkIn?: CheckInRecord; error?: string } {
     const member = this.db.members.find((m) => m.id === memberId);
@@ -1036,10 +1652,25 @@ class DatabaseService {
       return { canUndo: true };
     }
 
+    if (log.actionType === 'delete_plan' && log.snapshotBefore) {
+      return { canUndo: true };
+    }
+
+    if (log.actionType === 'delete_membership' && log.snapshotBefore) {
+      return { canUndo: true };
+    }
+
     return { canUndo: false, reason: 'No undo handler defined for this action type.' };
   }
 
   public undoAction(logId: string): { success: boolean; error?: string } {
+    if (this.currentUser && !hasPermission(this.currentUser, 'canUndoActions')) {
+      return {
+        success: false,
+        error: 'Restricted: Undo Actions permission must be enabled by Super Admin.',
+      };
+    }
+
     const check = this.canUndoAction(logId);
     if (!check.canUndo) {
       return { success: false, error: check.reason };
@@ -1123,6 +1754,46 @@ class DatabaseService {
         this.notify();
         return { success: true };
       }
+    }
+
+    if (log.actionType === 'delete_plan' && log.snapshotBefore) {
+      if (!this.db.plans.some((p) => p.id === log.snapshotBefore.id)) {
+        this.db.plans.push(log.snapshotBefore);
+      }
+      log.isReversed = true;
+
+      this.logActivity({
+        actionType: 'undo_action',
+        targetType: 'plan',
+        targetId: log.targetId,
+        targetName: log.targetName,
+        description: `Restored deleted membership plan "${log.targetName}".`,
+        reversalOfLogId: log.id,
+        isReversible: false,
+      });
+
+      this.notify();
+      return { success: true };
+    }
+
+    if (log.actionType === 'delete_membership' && log.snapshotBefore) {
+      if (!this.db.memberships.some((m) => m.id === log.snapshotBefore.id)) {
+        this.db.memberships.unshift(log.snapshotBefore);
+      }
+      log.isReversed = true;
+
+      this.logActivity({
+        actionType: 'undo_action',
+        targetType: 'membership',
+        targetId: log.targetId,
+        targetName: log.targetName,
+        description: `Restored deleted enrollment "${log.targetName}".`,
+        reversalOfLogId: log.id,
+        isReversible: false,
+      });
+
+      this.notify();
+      return { success: true };
     }
 
     return { success: false, error: 'Could not execute reverse operation.' };
@@ -1228,6 +1899,39 @@ class DatabaseService {
 
   public updateTailscaleStatus(status: Partial<TailscaleState>): void {
     this.db.tailscale = { ...this.db.tailscale, ...status };
+    this.notify();
+  }
+
+  public revokeTailscaleSession(deviceId: string): void {
+    const target = this.db.tailscale.activeSessions.find((s) => s.deviceId === deviceId);
+    this.db.tailscale.activeSessions = this.db.tailscale.activeSessions.filter(
+      (s) => s.deviceId !== deviceId
+    );
+    if (target) {
+      this.logActivity({
+        actionType: 'revoke_session',
+        targetType: 'system',
+        targetId: deviceId,
+        targetName: target.deviceName,
+        description: `Revoked Tailscale mobile session for "${target.deviceName}" (${target.username}).`,
+        isReversible: false,
+      });
+    }
+    this.notify();
+  }
+
+  public updateUpgradeModules(updates: Partial<NonNullable<GymDatabase['upgradeModules']>>): void {
+    if (this.currentUser?.role !== 'super_admin') {
+      return;
+    }
+    this.db.upgradeModules = {
+      multiBranchEnabled: false,
+      gstInvoicingEnabled: false,
+      biometricGateEnabled: false,
+      trainerPayrollEnabled: false,
+      ...(this.db.upgradeModules || {}),
+      ...updates,
+    };
     this.notify();
   }
 }

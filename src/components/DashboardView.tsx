@@ -1,27 +1,39 @@
-import React from 'react';
-import { GymDatabase, User, Member, MemberMembership, PaymentRecord } from '../types/gym';
+import React, { useMemo } from 'react';
+import { GymDatabase, User, Member, MemberMembership } from '../types/gym';
 import { formatINR, formatKolkataDate, formatKolkataDateTime } from '../services/crypto';
-import { dbService } from '../services/db';
+import {
+  dbService,
+  getEffectivePermissions,
+  getRoleLabel,
+  hasPermission,
+  isSuperAdminRole,
+} from '../services/db';
+import { compute12MonthAnalytics } from '../services/analytics';
+import { AnimatedCard, AnimatedSectionPanel } from './MotionPrimitives';
 import {
   Users,
   CreditCard,
-  ClipboardCheck,
   AlertTriangle,
   ArrowUpRight,
   Plus,
   MessageSquare,
   Undo2,
-  Calendar,
-  CheckCircle2,
   Clock,
-  Sparkles,
   TrendingUp,
+  Layers,
+  History,
+  HardDriveDownload,
+  Radio,
+  Settings,
+  SlidersHorizontal,
+  Crown,
 } from 'lucide-react';
+import { DesktopTab } from './Navigation';
 
 interface DashboardViewProps {
   db: GymDatabase;
   currentUser: User | null;
-  onNavigate: (tab: any) => void;
+  onNavigate: (tab: DesktopTab) => void;
   onOpenAddMember: () => void;
   onOpenRecordPayment: (memberId?: string) => void;
   onOpenQuickCheckIn: () => void;
@@ -36,20 +48,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigate,
   onOpenAddMember,
   onOpenRecordPayment,
-  onOpenQuickCheckIn,
   onOpenReminderModal,
   onOpenUndoModal,
   onSelectMember,
 }) => {
+  const isSuperAdmin = isSuperAdminRole(currentUser?.role);
+  const canViewAnalytics = hasPermission(currentUser, 'canViewAnalytics');
+  const canRecordPayments = hasPermission(currentUser, 'canRecordPayments');
+  const canManageMembers = hasPermission(currentUser, 'canManageMembers');
+  const canViewMemberContactDetails = hasPermission(currentUser, 'canViewMemberContactDetails');
+  const canSendPaymentReminders = hasPermission(currentUser, 'canSendPaymentReminders');
+  const canViewAllActivity = hasPermission(currentUser, 'canViewAllActivity');
+  const canUndoActions = hasPermission(currentUser, 'canUndoActions');
+  const canManageBackups = hasPermission(currentUser, 'canManageBackups');
+  const canManageTailscale = hasPermission(currentUser, 'canManageTailscale');
+
   // Metrics calculation
   const activeMembers = db.members.filter((m) => m.status === 'active');
-  const todayCheckIns = db.checkIns;
+  const frozenOrExpiredCount = db.members.filter(
+    (m) => m.status === 'frozen' || m.status === 'expired'
+  ).length;
+  const expiringMembers = db.members.filter(
+    (m) => m.status === 'pending_renewal' || m.status === 'expired'
+  );
 
   // Monthly revenue in INR (valid payments from this current month)
   const currentMonthPrefix = new Date().toISOString().slice(0, 7);
-  const monthlyRevenueInr = db.payments
-    .filter((p) => !p.isVoided && p.paymentDate.startsWith(currentMonthPrefix))
+  const validPayments = db.payments.filter((p) => !p.isVoided);
+  const monthlyRevenueInr = validPayments
+    .filter((p) => p.paymentDate.startsWith(currentMonthPrefix))
     .reduce((sum, p) => sum + p.amountInr, 0);
+  const totalCollectedAllTimeInr = validPayments.reduce((sum, p) => sum + p.amountInr, 0);
+  const voidedPaymentsCount = db.payments.filter((p) => p.isVoided).length;
+
+  // Plan & Enrollment metrics
+  const activeEnrollmentsCount = db.memberships.filter((m) => m.status === 'active').length;
+  const minPlanPrice = db.plans.length
+    ? Math.min(...db.plans.map((p) => p.priceInr))
+    : 0;
+  const maxPlanPrice = db.plans.length
+    ? Math.max(...db.plans.map((p) => p.priceInr))
+    : 0;
+
+  // Analytics summary
+  const analytics = useMemo(() => compute12MonthAnalytics(db), [db]);
 
   // Calculate total outstanding balances across all members
   let totalOutstandingDuesInr = 0;
@@ -67,15 +109,156 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
   });
 
-  // Expiring memberships (ending in next 7 days or pending renewal)
-  const expiringMembers = db.members.filter(
-    (m) => m.status === 'pending_renewal' || m.status === 'expired'
+  // Activity metrics
+  const scopedLogs = canViewAllActivity
+    ? db.activityLogs
+    : db.activityLogs.filter((l) => l.userId === currentUser?.id);
+  const visibleLogs = scopedLogs.slice(0, 6);
+  const undoableCount = scopedLogs.filter((l) => dbService.canUndoAction(l.id).canUndo).length;
+
+  // Super admin permission summary across all non-super-admin accounts
+  const governedAdmins = db.users.filter((u) => u.role !== 'super_admin');
+  const totalAdminGrants = governedAdmins.reduce(
+    (sum, acc) => sum + Object.values(getEffectivePermissions(acc)).filter(Boolean).length,
+    0
   );
 
-  // Recent activity logs (for owner: all; for staff: own)
-  const visibleLogs = currentUser?.role === 'owner'
-    ? db.activityLogs.slice(0, 6)
-    : db.activityLogs.filter((l) => l.userId === currentUser?.id).slice(0, 6);
+  // Upgrade modules summary
+  const enabledUpgradesCount = db.upgradeModules
+    ? Object.values(db.upgradeModules).filter(Boolean).length
+    : 0;
+
+  // Section overview cards (each navigates to its respective section)
+  const sectionCards: {
+    id: DesktopTab;
+    title: string;
+    category: string;
+    primaryMetric: string;
+    secondaryMetric: string;
+    footerText: string;
+    icon: React.ComponentType<{ className?: string }>;
+    iconAccentClass: string;
+    highlightRose?: boolean;
+  }[] = [
+    {
+      id: 'members',
+      title: 'Members Directory',
+      category: 'Gym Operations',
+      primaryMetric: `${db.members.length} Members`,
+      secondaryMetric: `${activeMembers.length} active · ${frozenOrExpiredCount} inactive`,
+      footerText: 'Profiles, health notes, renewals & balances',
+      icon: Users,
+      iconAccentClass: 'text-amber-400 bg-amber-500/10 border-amber-500/25',
+    },
+    {
+      id: 'memberships',
+      title: 'Memberships & Plans',
+      category: 'Gym Operations',
+      primaryMetric: `${db.plans.length} Plans`,
+      secondaryMetric: `${activeEnrollmentsCount} active enrollments`,
+      footerText:
+        db.plans.length > 0
+          ? `Tariffs ${formatINR(minPlanPrice)} – ${formatINR(maxPlanPrice)}`
+          : 'Create or manage membership tiers',
+      icon: Layers,
+      iconAccentClass: 'text-sky-400 bg-sky-500/10 border-sky-500/25',
+    },
+    {
+      id: 'payments',
+      title: 'Payments Ledger',
+      category: 'Finance',
+      primaryMetric: formatINR(totalCollectedAllTimeInr),
+      secondaryMetric: `${validPayments.length} receipts · ${voidedPaymentsCount} voided`,
+      footerText: 'UPI, Cash, Bank Transfer, POS & receipts',
+      icon: CreditCard,
+      iconAccentClass: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
+    },
+    ...(canViewAnalytics
+      ? [
+          {
+            id: 'analytics' as DesktopTab,
+            title: '12M Analytics',
+            category: 'Intelligence',
+            primaryMetric: formatINR(analytics.total12MonthRevenueInr),
+            secondaryMetric: `${analytics.currentRetentionRatePercent}% retention · ${analytics.avgChurnRatePercent}% churn`,
+            footerText: 'Revenue trends, signups & LTV breakdown',
+            icon: TrendingUp,
+            iconAccentClass: 'text-amber-400 bg-amber-500/10 border-amber-500/25',
+          },
+        ]
+      : []),
+    {
+      id: 'activity',
+      title: 'Activity & Undo Log',
+      category: 'Audit Trail',
+      primaryMetric: `${scopedLogs.length} Events`,
+      secondaryMetric: `${undoableCount} reversible actions ready`,
+      footerText: canViewAllActivity
+        ? 'Full gym audit log & safe reversals'
+        : 'Personal activity & reversible entries',
+      icon: History,
+      iconAccentClass: 'text-purple-400 bg-purple-500/10 border-purple-500/25',
+    },
+    ...(canManageBackups
+      ? [
+          {
+            id: 'backups' as DesktopTab,
+            title: 'Backups & Recovery',
+            category: 'Disaster Recovery',
+            primaryMetric: db.backupConfig.autoBackupEnabled ? 'AES-256 Active' : 'Manual Only',
+            secondaryMetric: db.backupConfig.lastBackupTimestamp
+              ? `Last: ${formatKolkataDateTime(db.backupConfig.lastBackupTimestamp).split(',')[0]}`
+              : 'No backup yet',
+            footerText: `Target: ${db.backupConfig.recipientEmail}`,
+            icon: HardDriveDownload,
+            iconAccentClass: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
+          },
+        ]
+      : []),
+    ...(canManageTailscale
+      ? [
+          {
+            id: 'tailscale' as DesktopTab,
+            title: 'Tailscale & Mobile Hub',
+            category: 'Private Network',
+            primaryMetric: db.tailscale.isServing ? 'Serving Port 3000' : 'Tunnel Paused',
+            secondaryMetric: `${db.tailscale.activeSessions.length} active mobile device${
+              db.tailscale.activeSessions.length === 1 ? '' : 's'
+            }`,
+            footerText: `${db.tailscale.tailnetDomain} (${db.tailscale.tailnetIp})`,
+            icon: Radio,
+            iconAccentClass: 'text-sky-400 bg-sky-500/10 border-sky-500/25',
+          },
+        ]
+      : []),
+    {
+      id: 'settings',
+      title: 'Account & Security',
+      category: 'Access & Upgrades',
+      primaryMetric: `${db.users.length} Local Accounts`,
+      secondaryMetric: `Signed in: ${getRoleLabel(currentUser?.role)}`,
+      footerText: `${
+        currentUser?.emailVerified ? 'Email verified' : 'Verify email'
+      } · ${enabledUpgradesCount}/4 upgrade modules active`,
+      icon: Settings,
+      iconAccentClass: 'text-neutral-300 bg-neutral-800 border-neutral-700',
+    },
+    ...(isSuperAdmin
+      ? [
+          {
+            id: 'super_admin_permissions' as DesktopTab,
+            title: 'Admin Permissions',
+            category: 'Super Admin Only',
+            primaryMetric: `${governedAdmins.length} Role Seats`,
+            secondaryMetric: `${totalAdminGrants} / ${governedAdmins.length * 16} permissions active`,
+            footerText: 'Assign roles & grant granular feature access',
+            icon: SlidersHorizontal,
+            iconAccentClass: 'text-rose-400 bg-rose-500/15 border-rose-500/30',
+            highlightRose: true,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -91,44 +274,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Quick Actions Strip */}
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => onNavigate('analytics')}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-amber-300 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/60 rounded-lg transition-colors"
-          >
-            <TrendingUp className="w-4 h-4 text-amber-400" />
-            <span>12M Analytics</span>
-          </button>
-          <button
-            onClick={onOpenQuickCheckIn}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-200 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors"
-          >
-            <ClipboardCheck className="w-4 h-4 text-emerald-400" />
-            <span>Check-in Member</span>
-          </button>
-          <button
-            onClick={() => onOpenRecordPayment()}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-200 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors"
-          >
-            <CreditCard className="w-4 h-4 text-sky-400" />
-            <span>Record Payment</span>
-          </button>
-          <button
-            onClick={onOpenAddMember}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Member</span>
-          </button>
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {canViewAnalytics && (
+            <button
+              onClick={() => onNavigate('analytics')}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-amber-300 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/60 rounded-lg transition-all hover:-translate-y-0.5"
+            >
+              <TrendingUp className="w-4 h-4 text-amber-400" />
+              <span>12M Analytics</span>
+            </button>
+          )}
+          {canRecordPayments && (
+            <button
+              onClick={() => onOpenRecordPayment()}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-200 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-all hover:-translate-y-0.5"
+            >
+              <CreditCard className="w-4 h-4 text-sky-400" />
+              <span>Record Payment</span>
+            </button>
+          )}
+          {canManageMembers && (
+            <button
+              onClick={onOpenAddMember}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-all hover:-translate-y-0.5 shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Member</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* 4-Stat Primary Metric Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Metric 1: Active Members */}
-        <div
+      {/* Primary KPI Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <AnimatedCard
+          index={0}
           onClick={() => onNavigate('members')}
-          className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl hover:border-neutral-700 transition-colors cursor-pointer"
+          className="group p-4 bg-neutral-900 border border-neutral-800 rounded-xl cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-neutral-400">Active Lifters</span>
@@ -142,35 +324,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               of {db.members.length} enrolled
             </span>
           </div>
-          <div className="mt-1 text-[11px] text-neutral-400">
-            {expiringMembers.length} pending renewal / expired
+          <div className="mt-1 text-[11px] text-neutral-400 flex items-center justify-between">
+            <span>{expiringMembers.length} pending renewal / expired</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-neutral-500 group-hover:text-amber-400 transition-colors" />
           </div>
-        </div>
+        </AnimatedCard>
 
-        {/* Metric 2: Today's Check-ins */}
-        <div
-          onClick={() => onNavigate('attendance')}
-          className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl hover:border-neutral-700 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-neutral-400">Today's Check-ins</span>
-            <ClipboardCheck className="w-4 h-4 text-emerald-400" />
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-2xl font-bold text-white font-mono tabular-nums">
-              {todayCheckIns.length}
-            </span>
-            <span className="text-[11px] text-emerald-400 font-medium">Floor active</span>
-          </div>
-          <div className="mt-1 text-[11px] text-neutral-400">
-            Peak hours: 6:30 AM – 9:00 AM & 6:00 PM – 8:30 PM
-          </div>
-        </div>
-
-        {/* Metric 3: Monthly Collections */}
-        <div
+        <AnimatedCard
+          index={1}
           onClick={() => onNavigate('payments')}
-          className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl hover:border-neutral-700 transition-colors cursor-pointer"
+          className="group p-4 bg-neutral-900 border border-neutral-800 rounded-xl cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-neutral-400">Month Collections (INR)</span>
@@ -182,15 +345,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </span>
             <span className="text-[11px] text-neutral-400 font-mono">External ledger</span>
           </div>
-          <div className="mt-1 text-[11px] text-neutral-400">
-            UPI, Cash, Bank Transfer, POS records
+          <div className="mt-1 text-[11px] text-neutral-400 flex items-center justify-between">
+            <span>UPI, Cash, Bank Transfer, POS records</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-neutral-500 group-hover:text-amber-400 transition-colors" />
           </div>
-        </div>
+        </AnimatedCard>
 
-        {/* Metric 4: Outstanding Dues */}
-        <div
+        <AnimatedCard
+          index={2}
           onClick={() => onNavigate('members')}
-          className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl hover:border-neutral-700 transition-colors cursor-pointer"
+          className="group p-4 bg-neutral-900 border border-neutral-800 rounded-xl cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-neutral-400">Outstanding Balances</span>
@@ -204,13 +368,82 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {membersWithDues.length} pending
             </span>
           </div>
-          <div className="mt-1 text-[11px] text-neutral-400">
-            Instant 1-click WhatsApp reminder
+          <div className="mt-1 text-[11px] text-neutral-400 flex items-center justify-between">
+            <span>Instant 1-click WhatsApp reminder</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-neutral-500 group-hover:text-amber-400 transition-colors" />
           </div>
+        </AnimatedCard>
+      </div>
+
+      {/* Section Overview Cards (Quick Jump Grid from Every Section) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Workspace Sections Overview</h3>
+            <p className="text-[11px] text-neutral-400">
+              Live snapshot from each module — click any card to jump directly to its section
+            </p>
+          </div>
+          <span className="text-[11px] font-mono text-neutral-500">
+            {sectionCards.length} active modules
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {sectionCards.map((card, idx) => {
+            const Icon = card.icon;
+            return (
+              <AnimatedCard
+                key={card.id}
+                index={idx}
+                onClick={() => onNavigate(card.id)}
+                className={`group p-4 rounded-xl border cursor-pointer flex flex-col justify-between gap-3 ${
+                  card.highlightRose
+                    ? 'bg-neutral-900 border-rose-500/35 hover:border-rose-400/70'
+                    : 'bg-neutral-900 border-neutral-800'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${card.iconAccentClass}`}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <span
+                        className={`text-[10px] font-mono uppercase tracking-wider block ${
+                          card.highlightRose ? 'text-rose-400 flex items-center gap-1' : 'text-neutral-500'
+                        }`}
+                      >
+                        {card.highlightRose && <Crown className="w-3 h-3 inline" />}
+                        <span>{card.category}</span>
+                      </span>
+                      <h4 className="text-sm font-bold text-white truncate group-hover:text-amber-300 transition-colors">
+                        {card.title}
+                      </h4>
+                    </div>
+                  </div>
+                  <ArrowUpRight className="w-4 h-4 text-neutral-500 group-hover:text-amber-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all shrink-0" />
+                </div>
+
+                <div>
+                  <div className="text-lg font-bold text-white font-mono tabular-nums">
+                    {card.primaryMetric}
+                  </div>
+                  <div className="text-xs text-neutral-300 mt-0.5">{card.secondaryMetric}</div>
+                </div>
+
+                <div className="pt-2 border-t border-neutral-800/80 text-[11px] text-neutral-400 truncate">
+                  {card.footerText}
+                </div>
+              </AnimatedCard>
+            );
+          })}
         </div>
       </div>
 
-      {/* Main Grid: Dues & Expiring (Left 7 cols) + Recent Activity & Check-ins (Right 5 cols) */}
+      {/* Main Grid: Dues & Expiring (Left 7 cols) + Recent Activity & System Card (Right 5 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Overdue Dues & Renewals */}
         <div className="lg:col-span-7 space-y-4">
@@ -226,7 +459,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </span>
           </div>
 
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden divide-y divide-neutral-800">
+          <AnimatedSectionPanel className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden divide-y divide-neutral-800">
             {membersWithDues.length === 0 ? (
               <div className="p-8 text-center text-xs text-neutral-400">
                 All member accounts are fully settled. No outstanding dues!
@@ -261,7 +494,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-neutral-400 mt-1">
-                      <span>{member.phone}</span>
+                      <span>{canViewMemberContactDetails ? member.phone : 'Phone restricted'}</span>
                       <span>·</span>
                       <span className="truncate">{membership?.planName || 'General Membership'}</span>
                       {membership?.endDate && (
@@ -278,63 +511,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <span className="text-xs font-bold text-rose-400 font-mono tabular-nums">
                       {formatINR(balance)}
                     </span>
-                    <button
-                      onClick={() => onOpenReminderModal(member, balance, membership?.endDate)}
-                      className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-400 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/60 rounded-md transition-colors"
-                      title="Prepare WhatsApp/SMS reminder"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Remind</span>
-                    </button>
-                    <button
-                      onClick={() => onOpenRecordPayment(member.id)}
-                      className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-neutral-200 bg-neutral-800 hover:bg-neutral-700 rounded-md transition-colors"
-                      title="Record external payment"
-                    >
-                      <CreditCard className="w-3.5 h-3.5 text-sky-400" />
-                      <span>Settle</span>
-                    </button>
+                    {canSendPaymentReminders && (
+                      <button
+                        onClick={() => onOpenReminderModal(member, balance, membership?.endDate)}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-400 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/60 rounded-md transition-colors"
+                        title="Prepare WhatsApp/SMS reminder"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Remind</span>
+                      </button>
+                    )}
+                    {canRecordPayments && (
+                      <button
+                        onClick={() => onOpenRecordPayment(member.id)}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-neutral-200 bg-neutral-800 hover:bg-neutral-700 rounded-md transition-colors"
+                        title="Record external payment"
+                      >
+                        <CreditCard className="w-3.5 h-3.5 text-sky-400" />
+                        <span>Settle</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               ))
             )}
-          </div>
-
-          {/* Quick Check-in Roster Preview */}
-          <div className="pt-2">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <ClipboardCheck className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-sm font-semibold text-white">Today's Check-in Feed</h3>
-              </div>
-              <button
-                onClick={() => onNavigate('attendance')}
-                className="text-xs text-amber-400 hover:underline flex items-center gap-0.5"
-              >
-                <span>Full Attendance</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="bg-neutral-900 border border-neutral-800 rounded-xl divide-y divide-neutral-800">
-              {todayCheckIns.slice(0, 4).map((chk) => (
-                <div key={chk.id} className="p-3 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <div>
-                      <span className="font-medium text-neutral-200">{chk.memberName}</span>
-                      <span className="text-neutral-500 text-[11px] block font-mono">
-                        Logged by {chk.recordedByUsername}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="text-[11px] font-mono text-neutral-400">
-                    {formatKolkataDateTime(chk.checkInTime).split(',')[1]}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+          </AnimatedSectionPanel>
         </div>
 
         {/* Right Column: Activity Log & Reversible Audit Trail */}
@@ -353,14 +554,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
           </div>
 
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl divide-y divide-neutral-800">
+          <AnimatedSectionPanel
+            delay={0.05}
+            className="bg-neutral-900 border border-neutral-800 rounded-xl divide-y divide-neutral-800"
+          >
             {visibleLogs.length === 0 ? (
               <div className="p-6 text-center text-xs text-neutral-400">No recent activity.</div>
             ) : (
               visibleLogs.map((log) => {
                 const checkUndo = dbService.canUndoAction(log.id);
                 return (
-                  <div key={log.id} className="p-3 space-y-1.5 text-xs">
+                  <div
+                    key={log.id}
+                    className="p-3 space-y-1.5 text-xs hover:bg-neutral-800/35 transition-colors"
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-neutral-300">{log.username}</span>
@@ -390,8 +597,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         </span>
                       )}
 
-                      {/* Undo Action if allowed */}
-                      {checkUndo.canUndo && (
+                      {canUndoActions && checkUndo.canUndo && (
                         <button
                           onClick={() => onOpenUndoModal(log.id)}
                           className="flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 font-medium px-2 py-0.5 rounded bg-amber-950/30 hover:bg-amber-950/60 border border-amber-800/40 transition-colors"
@@ -406,21 +612,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 );
               })
             )}
-          </div>
+          </AnimatedSectionPanel>
 
           {/* Windows Desktop & Tailscale System Status Card */}
-          <div className="p-4 bg-neutral-950/60 border border-neutral-800 rounded-xl space-y-2 text-xs">
-            <span className="text-neutral-400 font-semibold block uppercase font-mono text-[11px]">
-              Offline-First Architecture
-            </span>
+          <AnimatedCard
+            index={sectionCards.length + 3}
+            onClick={() => onNavigate(canManageTailscale ? 'tailscale' : 'settings')}
+            className="group p-4 bg-neutral-950/60 border border-neutral-800 rounded-xl space-y-2 text-xs cursor-pointer"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-neutral-400 font-semibold block uppercase font-mono text-[11px]">
+                Offline-First Architecture
+              </span>
+              <ArrowUpRight className="w-3.5 h-3.5 text-neutral-500 group-hover:text-amber-400 transition-colors" />
+            </div>
             <p className="text-neutral-300 text-[11px] leading-relaxed">
               Flex & Flow writes directly to local SQLite (`%APPDATA%\Flex & Flow\gym.sqlite`). It functions completely without internet. Mobile staff connect over your private Tailscale network.
             </p>
             <div className="pt-2 flex items-center justify-between text-[11px] font-mono text-neutral-400 border-t border-neutral-800/80">
-              <span>Tailscale: 100.92.14.88:3000</span>
-              <span className="text-emerald-400">Serving Encrypted</span>
+              <span>Tailscale: {db.tailscale.tailnetIp}:{db.tailscale.port}</span>
+              <span className={db.tailscale.isServing ? 'text-emerald-400' : 'text-neutral-500'}>
+                {db.tailscale.isServing ? 'Serving Encrypted' : 'Tunnel Offline'}
+              </span>
             </div>
-          </div>
+          </AnimatedCard>
         </div>
       </div>
     </div>

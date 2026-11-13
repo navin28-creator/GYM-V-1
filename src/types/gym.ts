@@ -1,4 +1,30 @@
-export type UserRole = 'owner' | 'staff';
+export type UserRole =
+  | 'super_admin'
+  | 'admin'
+  | 'owner'
+  | 'manager'
+  | 'accountant'
+  | 'staff'
+  | 'receptionist';
+
+export interface AdminPermissions {
+  canManageMembers: boolean;
+  canDeleteMembers: boolean;
+  canViewMemberContactDetails: boolean;
+  canManagePlans: boolean;
+  canRecordPayments: boolean;
+  canVoidAndDeletePayments: boolean;
+  canPrintReceipts: boolean;
+  canSendPaymentReminders: boolean;
+  canViewAnalytics: boolean;
+  canExportData: boolean;
+  canViewAllActivity: boolean;
+  canUndoActions: boolean;
+  canManageBackups: boolean;
+  canManageStaffAccounts: boolean;
+  canManageTailscale: boolean;
+  canAccessExpoMobile: boolean;
+}
 
 export interface User {
   id: string;
@@ -9,6 +35,7 @@ export interface User {
   recoveryEmail?: string;
   emailVerified: boolean;
   createdAt: string;
+  permissions?: AdminPermissions;
 }
 
 export type MemberStatus = 'active' | 'expired' | 'pending_renewal' | 'frozen';
@@ -82,14 +109,23 @@ export type ActivityActionType =
   | 'create_member'
   | 'update_member'
   | 'delete_member'
+  | 'create_plan'
+  | 'delete_plan'
   | 'assign_membership'
   | 'cancel_membership'
+  | 'delete_membership'
   | 'record_payment'
   | 'void_payment'
+  | 'delete_payment'
   | 'undo_action'
   | 'backup_export'
   | 'backup_restore'
   | 'owner_created'
+  | 'user_created'
+  | 'delete_user'
+  | 'update_permissions'
+  | 'update_role'
+  | 'revoke_session'
   | 'password_reset'
   | 'local_recovery'
   | 'member_checkin';
@@ -101,7 +137,7 @@ export interface ActivityLogEntry {
   username: string;
   role: UserRole;
   actionType: ActivityActionType;
-  targetType: 'member' | 'membership' | 'payment' | 'user' | 'system' | 'checkin';
+  targetType: 'member' | 'plan' | 'membership' | 'payment' | 'user' | 'system' | 'checkin';
   targetId: string;
   targetName?: string;
   description: string;
@@ -142,6 +178,13 @@ export interface TailscaleState {
   }[];
 }
 
+export interface UpgradeModulesConfig {
+  multiBranchEnabled: boolean;
+  gstInvoicingEnabled: boolean;
+  biometricGateEnabled: boolean;
+  trainerPayrollEnabled: boolean;
+}
+
 export interface GymDatabase {
   version: number;
   dbPath: string;
@@ -154,4 +197,5 @@ export interface GymDatabase {
   activityLogs: ActivityLogEntry[];
   backupConfig: BackupConfig;
   tailscale: TailscaleState;
+  upgradeModules?: UpgradeModulesConfig;
 }

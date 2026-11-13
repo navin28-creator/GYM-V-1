@@ -12,9 +12,15 @@ import {
   LogOut,
   UserCheck,
   Shield,
+  ShieldCheck,
+  Crown,
   KeyRound,
   Download,
+  Briefcase,
+  Calculator,
+  ClipboardList,
 } from 'lucide-react';
+import { getRoleLabel } from '../services/db';
 
 interface WindowsTitleBarProps {
   currentUser: User | null;
@@ -126,14 +132,24 @@ export const WindowsTitleBar: React.FC<WindowsTitleBarProps> = ({
         {currentUser ? (
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 text-neutral-300 text-[11px]">
-              {currentUser.role === 'owner' ? (
+              {currentUser.role === 'super_admin' ? (
+                <Crown className="w-3.5 h-3.5 text-purple-400" />
+              ) : currentUser.role === 'admin' ? (
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              ) : currentUser.role === 'owner' ? (
                 <Shield className="w-3.5 h-3.5 text-amber-400" />
+              ) : currentUser.role === 'manager' ? (
+                <Briefcase className="w-3.5 h-3.5 text-cyan-400" />
+              ) : currentUser.role === 'accountant' ? (
+                <Calculator className="w-3.5 h-3.5 text-teal-400" />
+              ) : currentUser.role === 'receptionist' ? (
+                <ClipboardList className="w-3.5 h-3.5 text-indigo-400" />
               ) : (
                 <UserCheck className="w-3.5 h-3.5 text-sky-400" />
               )}
               <span className="font-medium max-w-[100px] truncate">{currentUser.username}</span>
-              <span className="text-[10px] uppercase font-mono px-1 py-0.2 bg-neutral-800 text-neutral-400 rounded">
-                {currentUser.role}
+              <span className="text-[10px] uppercase font-mono px-1.5 py-0.2 bg-neutral-800 text-neutral-300 rounded">
+                {getRoleLabel(currentUser.role)}
               </span>
             </div>
             <button

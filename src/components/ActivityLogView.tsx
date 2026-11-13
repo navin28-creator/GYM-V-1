@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { GymDatabase, ActivityLogEntry, User } from '../types/gym';
-import { dbService } from '../services/db';
+import { dbService, hasPermission, getRoleLabel } from '../services/db';
 import { formatKolkataDateTime } from '../services/crypto';
+import { AnimatedSectionPanel } from './MotionPrimitives';
 import {
   History,
   Undo2,
@@ -11,8 +12,12 @@ import {
   Filter,
   UserCheck,
   Shield,
+  Crown,
   X,
   FileText,
+  Briefcase,
+  Calculator,
+  ClipboardList,
 } from 'lucide-react';
 
 interface ActivityLogViewProps {
@@ -26,11 +31,12 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
   currentUser,
   onOpenUndoModal,
 }) => {
-  const isOwner = currentUser?.role === 'owner';
+  const canViewAllActivity = hasPermission(currentUser, 'canViewAllActivity');
+  const canUndoActions = hasPermission(currentUser, 'canUndoActions');
   const [filterType, setFilterType] = useState<string>('all');
 
-  // Owners can review all activity; staff can review their own activity
-  const visibleLogs = isOwner
+  // Accounts with canViewAllActivity can review all activity; otherwise personal log only
+  const visibleLogs = canViewAllActivity
     ? db.activityLogs
     : db.activityLogs.filter((l) => l.userId === currentUser?.id);
 
@@ -49,7 +55,7 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold tracking-tight text-white">Activity & Audit Log</h2>
             <span className="text-xs font-mono px-2 py-0.5 rounded bg-neutral-800 text-neutral-300">
-              {isOwner ? 'Owner Mode (Full Gym Audit)' : 'Staff Mode (Personal Log)'}
+              {canViewAllActivity ? `${getRoleLabel(currentUser?.role)} Mode (Full Gym Audit)` : 'Scoped Mode (Personal Log)'}
             </span>
           </div>
           <p className="text-xs text-neutral-400 mt-0.5">
@@ -93,15 +99,15 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
       </div>
 
       {/* Audit Policy Notice */}
-      <div className="p-3 bg-neutral-900 border border-neutral-800 rounded-lg text-xs text-neutral-300 flex items-start gap-2.5">
+      <AnimatedSectionPanel className="p-3 bg-neutral-900 border border-neutral-800 rounded-lg text-xs text-neutral-300 flex items-start gap-2.5">
         <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
         <div className="leading-relaxed">
           <strong>Reversible Undo Policy:</strong> Reversing an action keeps the original event and attaches a linked reversal record. Members or memberships with subsequent history cannot be deleted; external payments are voided rather than erased to preserve balance integrity.
         </div>
-      </div>
+      </AnimatedSectionPanel>
 
       {/* Log Entries Table */}
-      <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
+      <AnimatedSectionPanel delay={0.04} className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-neutral-950/80 text-neutral-400 uppercase font-mono text-[11px] border-b border-neutral-800">
@@ -134,8 +140,18 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
                       {/* Actor */}
                       <td className="py-3 px-3 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
-                          {log.role === 'owner' ? (
+                          {log.role === 'super_admin' ? (
+                            <Crown className="w-3.5 h-3.5 text-purple-400" />
+                          ) : log.role === 'admin' ? (
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : log.role === 'owner' ? (
                             <Shield className="w-3.5 h-3.5 text-amber-400" />
+                          ) : log.role === 'manager' ? (
+                            <Briefcase className="w-3.5 h-3.5 text-cyan-400" />
+                          ) : log.role === 'accountant' ? (
+                            <Calculator className="w-3.5 h-3.5 text-teal-400" />
+                          ) : log.role === 'receptionist' ? (
+                            <ClipboardList className="w-3.5 h-3.5 text-indigo-400" />
                           ) : (
                             <UserCheck className="w-3.5 h-3.5 text-sky-400" />
                           )}
@@ -182,13 +198,22 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
                       {/* Undo Action */}
                       <td className="py-3 px-3 text-right whitespace-nowrap">
                         {check.canUndo ? (
-                          <button
-                            onClick={() => onOpenUndoModal(log.id)}
-                            className="flex items-center gap-1 ml-auto text-xs font-semibold text-amber-400 hover:text-amber-300 px-2.5 py-1 rounded bg-amber-950/40 hover:bg-amber-950/70 border border-amber-800/60 transition-colors"
-                          >
-                            <Undo2 className="w-3.5 h-3.5" />
-                            <span>Undo</span>
-                          </button>
+                          canUndoActions ? (
+                            <button
+                              onClick={() => onOpenUndoModal(log.id)}
+                              className="flex items-center gap-1 ml-auto text-xs font-semibold text-amber-400 hover:text-amber-300 px-2.5 py-1 rounded bg-amber-950/40 hover:bg-amber-950/70 border border-amber-800/60 transition-colors"
+                            >
+                              <Undo2 className="w-3.5 h-3.5" />
+                              <span>Undo</span>
+                            </button>
+                          ) : (
+                            <span
+                              className="text-[10px] font-mono text-neutral-500 bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800"
+                              title="Undo Actions must be enabled by Super Admin"
+                            >
+                              Undo Restricted
+                            </span>
+                          )
                         ) : (
                           <span className="text-[11px] text-neutral-600 font-mono">
                             {log.isReversed ? 'Undone' : '—'}
@@ -202,7 +227,7 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
             </tbody>
           </table>
         </div>
-      </div>
+      </AnimatedSectionPanel>
     </div>
   );
 };

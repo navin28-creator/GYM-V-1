@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { GymDatabase, User } from '../types/gym';
 import { compute12MonthAnalytics, MonthlyMetric } from '../services/analytics';
 import { formatINR } from '../services/crypto';
+import { hasPermission } from '../services/db';
+import { AnimatedCard, AnimatedSectionPanel } from './MotionPrimitives';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -59,6 +61,20 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ db, currentUser })
   const customCurrencyFormatter = (value: number) => {
     return [formatINR(value), 'Revenue'];
   };
+
+  if (!hasPermission(currentUser, 'canViewAnalytics')) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <AnimatedSectionPanel className="bg-neutral-900 border border-neutral-800 rounded-xl p-8 text-center space-y-3">
+          <ShieldCheck className="w-8 h-8 text-amber-400 mx-auto" />
+          <h3 className="text-base font-bold text-white">Analytics Access Restricted</h3>
+          <p className="text-xs text-neutral-400 max-w-md mx-auto">
+            Your account does not currently have the <strong>View Financial Analytics</strong> permission. A Super Admin can grant this access in Admin Permissions.
+          </p>
+        </AnimatedSectionPanel>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto font-sans">
@@ -129,7 +145,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ db, currentUser })
       {/* 4-Stat Primary Metric Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: 12-Month Revenue */}
-        <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-2">
+        <AnimatedCard index={0} className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-2">
           <div className="flex items-center justify-between text-neutral-400 text-xs">
             <span>12-Month Gross Revenue</span>
             <TrendingUp className="w-4 h-4 text-amber-400" />
@@ -147,10 +163,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ db, currentUser })
             <span>Monthly Avg: {formatINR(analytics.avgMonthlyRevenueInr)}</span>
             <span className="text-neutral-500">Peak: Nov 26</span>
           </div>
-        </div>
+        </AnimatedCard>
 
         {/* KPI 2: Signups Growth */}
-        <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-2">
+        <AnimatedCard index={1} className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-2">
           <div className="flex items-center justify-between text-neutral-400 text-xs">
             <span>Total Signups (12M)</span>
             <Users className="w-4 h-4 text-sky-400" />
@@ -167,10 +183,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ db, currentUser })
             <span>Current Roster: {analytics.monthlyMetrics[analytics.monthlyMetrics.length - 1]?.cumulativeMembers} lifters</span>
             <span className="text-emerald-400">+112 Net</span>
           </div>
-        </div>
+        </AnimatedCard>
 
         {/* KPI 3: Churn Rate */}
-        <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-2">
+        <AnimatedCard index={2} className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-2">
           <div className="flex items-center justify-between text-neutral-400 text-xs">
             <span>Avg Monthly Churn Rate</span>
             <UserMinus className="w-4 h-4 text-rose-400" />
@@ -187,10 +203,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ db, currentUser })
             <span>Benchmark: &lt; 6.0%</span>
             <span className="text-emerald-400">Healthy</span>
           </div>
-        </div>
+        </AnimatedCard>
 
         {/* KPI 4: Estimated Customer LTV */}
-        <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-2">
+        <AnimatedCard index={3} className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-2">
           <div className="flex items-center justify-between text-neutral-400 text-xs">
             <span>Estimated Member LTV</span>
             <CreditCard className="w-4 h-4 text-emerald-400" />
@@ -207,12 +223,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ db, currentUser })
             <span>ARPU: ₹1,250/mo</span>
             <span className="text-amber-400">Recurring</span>
           </div>
-        </div>
+        </AnimatedCard>
       </div>
 
       {/* CHART 1: Monthly Revenue Trends (Area + Target) */}
       {(activeChartSection === 'all' || activeChartSection === 'revenue') && (
-        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
+        <AnimatedSectionPanel className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-800 pb-3">
             <div>
               <div className="flex items-center gap-2">
@@ -347,14 +363,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ db, currentUser })
               </ResponsiveContainer>
             </div>
           </div>
-        </div>
+        </AnimatedSectionPanel>
       )}
 
       {/* 2-Column: Member Signup Growth (Left) + Churn & Retention Rates (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* CHART 2: Member Signup Growth */}
         {(activeChartSection === 'all' || activeChartSection === 'signups') && (
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
+          <AnimatedSectionPanel className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -408,12 +424,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ db, currentUser })
                 Significant acquisition spikes occur in <strong>January</strong> (+32) following New Year resolutions and <strong>November</strong> (+38) driven by the winter strength challenge.
               </p>
             </div>
-          </div>
+          </AnimatedSectionPanel>
         )}
 
         {/* CHART 3: Member Churn Rates & Reasons */}
         {(activeChartSection === 'all' || activeChartSection === 'churn') && (
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
+          <AnimatedSectionPanel delay={0.05} className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -485,12 +501,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ db, currentUser })
                 ))}
               </div>
             </div>
-          </div>
+          </AnimatedSectionPanel>
         )}
       </div>
 
       {/* 12-Month Performance Ledger Table */}
-      <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
+      <AnimatedSectionPanel className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
         <div className="px-5 py-3 border-b border-neutral-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4 text-amber-400" />
@@ -553,7 +569,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ db, currentUser })
             </tbody>
           </table>
         </div>
-      </div>
+      </AnimatedSectionPanel>
     </div>
   );
 };
